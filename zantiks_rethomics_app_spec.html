@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zantiks-to-Rethomics Analysis App Specification</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #2c3e50;
+      --primary-accent: #3498db;
+      --secondary-accent: #18bc9c;
+      --bg-dark: #0f172a;
+      --card-bg: #1e293b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border-color: #334155;
+      --code-bg: #090d16;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 2.5rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border-radius: 20px;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      margin-top: 1rem;
+    }
+
+    section {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      color: #38bdf8;
+      margin-bottom: 1rem;
+      border-bottom: 2px solid var(--border-color);
+      padding-bottom: 0.5rem;
+    }
+
+    h3 {
+      font-size: 1.2rem;
+      color: #818cf8;
+      margin: 1.2rem 0 0.6rem 0;
+    }
+
+    p, li {
+      color: #cbd5e1;
+      font-size: 0.98rem;
+    }
+
+    ul, ol {
+      margin-left: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    li {
+      margin-bottom: 0.4rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    th {
+      background-color: rgba(15, 23, 42, 0.6);
+      color: #38bdf8;
+      font-weight: 600;
+    }
+
+    tr:hover {
+      background-color: rgba(255, 255, 255, 0.03);
+    }
+
+    pre {
+      background-color: var(--code-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.2rem;
+      overflow-x: auto;
+      font-family: 'Fira Code', monospace;
+      font-size: 0.9rem;
+      color: #e2e8f0;
+      margin: 1rem 0;
+    }
+
+    code {
+      font-family: 'Fira Code', monospace;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.88rem;
+      color: #38bdf8;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    @media (max-width: 768px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Zantiks-to-Rethomics Analysis App Specification</h1>
+      <p class="subtitle">Comprehensive Functional & Technical Design Specification Document</p>
+      <span class="badge">Version 1.0.0 • R Shiny Architecture</span>
+    </header>
+
+    <section>
+      <h2>1. System Overview & Objective</h2>
+      <p>This application automates data transformation and behavioral genetics analysis for circadian rhythm researchers using <strong>Zantiks MWP / multi-well systems</strong>.</p>
+      <ul>
+        <li><strong>Module 1 (Data Converter):</strong> Converts raw Zantiks CSV output into 42-column standard Drosophila Activity Monitor (DAM) tab-separated text format (<code>DAM_file.txt</code>).</li>
+        <li><strong>Module 2 (Analysis Studio):</strong> Links DAM files with experimental metadata (<code>metadata.csv</code>) and runs Rethomics packages (<code>behavr</code>, <code>damr</code>, <code>sleepr</code>, <code>zeitgebr</code>, <code>ggetho</code>) for sleep, activity, actograms, and circadian rhythmicity.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2. Input Schemas & Formats</h2>
+      
+      <h3>2.1 Raw Zantiks CSV Format</h3>
+      <p>Skipped metadata lines in rows 1-4 contain start timestamp. Column headers at row 5 contain <code>RUNTIME</code>, <code>UNIT</code>, <code>TEMPERATURE</code>, <code>L_OR_D</code>, <code>DAY</code>, <code>HOUR</code>, <code>TIME_BIN</code>, and well channels <code>A1</code> to <code>D6</code>.</p>
+
+      <h3>2.2 Standard 42-Column DAM File Format</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Column Range</th>
+            <th>Field Name</th>
+            <th>Data Type</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Col 1</td>
+            <td>Index</td>
+            <td>Integer</td>
+            <td>1 to N row sequence number</td>
+          </tr>
+          <tr>
+            <td>Col 2</td>
+            <td>Date</td>
+            <td>String</td>
+            <td>Formatted date e.g., <code>01 Aug 25</code></td>
+          </tr>
+          <tr>
+            <td>Col 3</td>
+            <td>Time</td>
+            <td>String</td>
+            <td>Formatted time <code>HH:MM:SS</code></td>
+          </tr>
+          <tr>
+            <td>Col 4</td>
+            <td>Status</td>
+            <td>Integer</td>
+            <td>Light status (1 = Light, 0 = Dark)</td>
+          </tr>
+          <tr>
+            <td>Cols 5–10</td>
+            <td>Flags & Temp</td>
+            <td>Integer</td>
+            <td>System status flags (default 0)</td>
+          </tr>
+          <tr>
+            <td>Cols 11–34</td>
+            <td>Channels 1–24</td>
+            <td>Integer</td>
+            <td>Scaled movement counts: <code>round(distance * 1000)</code></td>
+          </tr>
+          <tr>
+            <td>Cols 35–42</td>
+            <td>Channels 25–32</td>
+            <td>Integer</td>
+            <td>Zero-padded unused channels</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>2.3 Experimental Metadata Schema</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Column Name</th>
+            <th>Type</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>file</code></td><td>String</td><td>Converted DAM file name (e.g., <code>DAM_file.txt</code>)</td></tr>
+          <tr><td><code>start_datetime</code></td><td>Timestamp</td><td>Analysis start window (<code>YYYY-MM-DD HH:MM:SS</code>)</td></tr>
+          <tr><td><code>stop_datetime</code></td><td>Timestamp</td><td>Analysis stop window (<code>YYYY-MM-DD HH:MM:SS</code>)</td></tr>
+          <tr><td><code>region_id</code></td><td>Integer</td><td>Channel ID (1 to 24)</td></tr>
+          <tr><td><code>well</code></td><td>String</td><td>Plate well coordinate (<code>A1</code> through <code>D6</code>)</td></tr>
+          <tr><td><code>genotype</code></td><td>String</td><td>Experimental group or genotype label</td></tr>
+          <tr><td><code>sex</code></td><td>String</td><td>Sex identifier (<code>female</code>/<code>male</code>)</td></tr>
+          <tr><td><code>observations</code></td><td>String</td><td>Inclusion filter (<code>alive</code> vs <code>dead</code>)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>3. Data Transformation Logic</h2>
+      <pre><code># Data Transformation Core Algorithm (Zantiks CSV -> DAM Text)
+convert_zantiks_to_dam <- function(input_csv, output_txt, scale_factor = 1000) {
+  start_dt <- parse_zantiks_datetime(read_first_line(input_csv))
+  raw_df <- fread(input_csv, skip = 4)
+  
+  timestamps <- start_dt + raw_df$RUNTIME
+  date_formatted <- strftime(timestamps, "%d %b %y")
+  time_formatted <- strftime(timestamps, "%H:%M:%S")
+  
+  act_cols <- names(raw_df)[grep("^[A-D][1-6]$", names(raw_df))]
+  scaled_act <- round(as.matrix(raw_df[, ..act_cols]) * scale_factor)
+  
+  complete_dam <- cbind(
+    Index = 1:nrow(raw_df),
+    Date = date_formatted,
+    Time = time_formatted,
+    Status = ifelse(raw_df$L_OR_D == "LIGHT", 1, 0),
+    scaled_act_pad32
+  )
+  write.table(complete_dam, output_txt, sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+}</code></pre>
+    </section>
+
+    <section>
+      <h2>4. Visualizations & Plots</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Plot Name</th>
+            <th>Package</th>
+            <th>X / Y Axes</th>
+            <th>Faceting / Color</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Individual Actograms</strong></td>
+            <td><code>ggetho</code></td>
+            <td>Time (Days) / 24h Wrap</td>
+            <td>Facet by <code>genotype + well</code></td>
+            <td>Single-animal daily activity heatmaps</td>
+          </tr>
+          <tr>
+            <td><strong>Average Actograms</strong></td>
+            <td><code>ggetho</code></td>
+            <td>Time (Days) / 24h Wrap</td>
+            <td>Facet by <code>genotype</code></td>
+            <td>Population mean activity heatmaps</td>
+          </tr>
+          <tr>
+            <td><strong>24h Sleep Profile</strong></td>
+            <td><code>ggetho</code></td>
+            <td>24h Wrapped / Fraction Asleep</td>
+            <td>Color by <code>genotype</code></td>
+            <td>Diurnal sleep profile with LD bars</td>
+          </tr>
+          <tr>
+            <td><strong>24h Activity Profile</strong></td>
+            <td><code>ggetho</code></td>
+            <td>24h Wrapped / Activity Rate</td>
+            <td>Color by <code>genotype</code></td>
+            <td>Diurnal activity profile with LD bars</td>
+          </tr>
+          <tr>
+            <td><strong>Sleep Box Plots</strong></td>
+            <td><code>ggplot2</code></td>
+            <td>Genotype / Sleep (min/day)</td>
+            <td>Fill by <code>genotype</code></td>
+            <td>Daily sleep amount comparison</td>
+          </tr>
+          <tr>
+            <td><strong>Activity Box Plots</strong></td>
+            <td><code>ggplot2</code></td>
+            <td>Genotype / Activity Count</td>
+            <td>Fill by <code>genotype</code></td>
+            <td>Daily activity volume comparison</td>
+          </tr>
+          <tr>
+            <td><strong>Chi-Square Periodogram</strong></td>
+            <td><code>zeitgebr</code></td>
+            <td>Period (h) / Power (Qp)</td>
+            <td>Facet by <code>genotype</code></td>
+            <td>Circadian rhythmicity analysis</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>5. User Interface Architecture</h2>
+      <div class="grid-2">
+        <div>
+          <h3>App Navigation Tabs</h3>
+          <ol>
+            <li><strong>Data Conversion:</strong> Upload & transform Zantiks CSV</li>
+            <li><strong>Metadata Manager:</strong> Verify metadata tables</li>
+            <li><strong>Actograms Studio:</strong> Heatmap tile plots</li>
+            <li><strong>Sleep & Activity Profiles:</strong> Time-series & 24h wrapped profiles</li>
+            <li><strong>Box Plots & Statistics:</strong> Wilcoxon rank-sum tests</li>
+            <li><strong>Circadian Analysis:</strong> Chi-square periodograms</li>
+            <li><strong>Export Center:</strong> PNG/PDF figures & CSV downloads</li>
+          </ol>
+        </div>
+        <div>
+          <h3>Statistical Test Suite</h3>
+          <ul>
+            <li><strong>Non-Parametric 2-Group:</strong> Wilcoxon rank-sum test (Mann-Whitney U)</li>
+            <li><strong>Multi-Group:</strong> Kruskal-Wallis test</li>
+            <li><strong>Rhythmicity Criteria:</strong> Chi-Square periodogram peak power vs significance threshold</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
