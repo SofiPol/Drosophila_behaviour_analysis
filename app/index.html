@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zantiks-to-Rethomics Behavioral Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- ================= Header ================= -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-icon">🪰</div>
+        <div>
+          <h1>Zantiks-to-Rethomics Behavioral Analyzer</h1>
+          <p class="brand-sub">Drosophila circadian &amp; sleep analysis · DAM conversion → Rethomics-style pipeline</p>
+        </div>
+      </div>
+      <div class="workflow">
+        <span class="wf-step" id="wf-1"><i>1</i> Upload</span>
+        <span class="wf-arrow">→</span>
+        <span class="wf-step" id="wf-2"><i>2</i> Convert</span>
+        <span class="wf-arrow">→</span>
+        <span class="wf-step" id="wf-3"><i>3</i> Verify</span>
+        <span class="wf-arrow">→</span>
+        <span class="wf-step" id="wf-4"><i>4</i> Analyze</span>
+        <span class="wf-arrow">→</span>
+        <span class="wf-step" id="wf-5"><i>5</i> Export</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= Tabs ================= -->
+  <nav class="tabbar" id="tabbar">
+    <button class="tab-btn active" data-tab="tab-convert">1 · Data Conversion</button>
+    <button class="tab-btn" data-tab="tab-metadata">2 · Metadata Manager</button>
+    <button class="tab-btn" data-tab="tab-actogram">3 · Actograms</button>
+    <button class="tab-btn" data-tab="tab-profiles">4 · Sleep &amp; Activity Profiles</button>
+    <button class="tab-btn" data-tab="tab-boxplots">5 · Box Plots &amp; Statistics</button>
+    <button class="tab-btn" data-tab="tab-circadian">6 · Circadian Analysis</button>
+    <button class="tab-btn" data-tab="tab-export">7 · Data &amp; Figure Export</button>
+  </nav>
+
+  <main class="container">
+
+    <!-- ================= Tab 1: Data Conversion ================= -->
+    <section class="tab-panel active" id="tab-convert">
+      <div class="panel-head">
+        <h2>Data Conversion &amp; Ingestion</h2>
+        <p>Upload a raw Zantiks CSV output and convert it into standard DAM (Drosophila Activity Monitor) tab-separated format.</p>
+      </div>
+
+      <div class="card">
+        <div class="dropzone" id="zantiks-drop">
+          <input type="file" id="zantiks-file" accept=".csv,.txt" hidden>
+          <div class="dz-icon">📄</div>
+          <p><strong>Drop a Zantiks CSV here</strong> or <span class="link">browse files</span></p>
+          <p class="dz-hint">e.g. <code>circadian_rhythms_glasgow-20250801T141426.csv</code></p>
+        </div>
+        <div class="row-buttons">
+          <button class="btn ghost" id="btn-sample-zantiks">🎲 Load sample Zantiks data</button>
+        </div>
+      </div>
+
+      <div class="card hidden" id="zantiks-info-card">
+        <h3>Parsed file info</h3>
+        <div class="info-grid" id="zantiks-info"></div>
+        <h3 style="margin-top:16px">Channel overview (A1–D6)</h3>
+        <div class="table-wrap">
+          <table class="data-table" id="channel-table"></table>
+        </div>
+        <div class="row-buttons">
+          <button class="btn primary" id="btn-convert">⚙️ Convert to DAM Format</button>
+        </div>
+      </div>
+
+      <div class="card hidden" id="dam-result-card">
+        <h3>DAM file preview <span class="badge" id="dam-badge"></span></h3>
+        <p class="muted" id="dam-summary"></p>
+        <div class="table-wrap">
+          <table class="data-table" id="dam-preview-table"></table>
+        </div>
+        <div class="row-buttons">
+          <button class="btn primary" id="btn-download-dam">⬇️ Download DAM_file.txt</button>
+          <button class="btn ghost" id="btn-goto-metadata">Next: Metadata Manager →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= Tab 2: Metadata Manager ================= -->
+    <section class="tab-panel" id="tab-metadata">
+      <div class="panel-head">
+        <h2>Metadata Management</h2>
+        <p>Upload experimental metadata, cross-validate against the DAM file, edit rows, and link everything into an analyzable dataset.</p>
+      </div>
+
+      <div class="card">
+        <div class="dropzone" id="metadata-drop">
+          <input type="file" id="metadata-file" accept=".csv,.txt" hidden>
+          <div class="dz-icon">🏷️</div>
+          <p><strong>Drop a metadata CSV here</strong> or <span class="link">browse files</span></p>
+          <p class="dz-hint">Requires: <code>file, start_datetime, stop_datetime, region_id, well, genotype, sex, replicate, exp, observations</code></p>
+        </div>
+        <div class="row-buttons">
+          <button class="btn ghost" id="btn-sample-metadata">🎲 Load sample metadata</button>
+        </div>
+      </div>
+
+      <div class="card hidden" id="metadata-result-card">
+        <h3>Validation report <span class="badge" id="meta-badge"></span></h3>
+        <div id="meta-issues"></div>
+        <h3 style="margin-top:16px">Metadata table (click cells to edit)</h3>
+        <div class="table-wrap">
+          <table class="data-table editable" id="metadata-table"></table>
+        </div>
+        <div class="row-buttons">
+          <button class="btn primary" id="btn-link-data">🔗 Link data &amp; Run Analysis</button>
+        </div>
+      </div>
+
+      <div class="card hidden" id="linked-card">
+        <h3>Linked dataset summary</h3>
+        <div class="info-grid" id="linked-info"></div>
+        <div class="row-buttons">
+          <button class="btn primary" id="btn-goto-actogram">Next: Actograms →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= Tab 3: Actograms ================= -->
+    <section class="tab-panel" id="tab-actogram">
+      <div class="panel-head">
+        <h2>Actogram Studio</h2>
+        <p>Individual fly and average group actograms (tile heatmaps) across the whole experiment.</p>
+      </div>
+      <div class="card">
+        <div class="controls">
+          <label>Mode
+            <select id="act-mode">
+              <option value="individual">Individual actograms</option>
+              <option value="group">Average group actograms</option>
+            </select>
+          </label>
+          <label>Binning
+            <select id="act-bin">
+              <option value="1">1 min</option>
+              <option value="5">5 min</option>
+              <option value="15">15 min</option>
+              <option value="30" selected>30 min</option>
+              <option value="60">60 min</option>
+            </select>
+          </label>
+          <label>Colour map
+            <select id="act-colormap">
+              <option value="viridis" selected>Viridis</option>
+              <option value="magma">Magma</option>
+              <option value="plasma">Plasma</option>
+              <option value="standard">Standard</option>
+            </select>
+          </label>
+          <button class="btn primary" id="btn-render-actogram">🖼️ Render Actograms</button>
+        </div>
+      </div>
+      <div class="chart-area" id="actogram-container">
+        <div class="empty-state">Load &amp; link a dataset to render actograms.</div>
+      </div>
+    </section>
+
+    <!-- ================= Tab 4: Profiles ================= -->
+    <section class="tab-panel" id="tab-profiles">
+      <div class="panel-head">
+        <h2>Sleep &amp; Activity Profiles</h2>
+        <p>Whole-experiment trajectories plus 24-hour wrapped sleep and activity profiles with LD annotations.</p>
+      </div>
+      <div class="card">
+        <div class="controls">
+          <label>Phase
+            <select id="prof-phase">
+              <option value="LD" selected>Entrainment (LD)</option>
+              <option value="DD">Free-running (DD)</option>
+              <option value="ALL">All days</option>
+            </select>
+          </label>
+          <label>Resolution
+            <select id="prof-res">
+              <option value="1">1 min</option>
+              <option value="5" selected>5 min</option>
+              <option value="15">15 min</option>
+              <option value="30">30 min</option>
+            </select>
+          </label>
+          <label>Y-max (optional)
+            <input type="number" id="prof-ymax" placeholder="auto" min="0" step="1000">
+          </label>
+          <button class="btn primary" id="btn-render-profiles">🖼️ Render Profiles</button>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Whole Experiment Activity Profile
+          <button class="btn small ghost export-btn" data-export="whole-exp">Export</button>
+        </div>
+        <div class="chart-area" id="chart-whole-exp"><div class="empty-state">No data yet.</div></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">24-Hour Sleep Profile
+          <button class="btn small ghost export-btn" data-export="sleep-profile">Export</button>
+        </div>
+        <div class="chart-area" id="chart-sleep-profile"><div class="empty-state">No data yet.</div></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">24-Hour Activity Profile
+          <button class="btn small ghost export-btn" data-export="activity-profile">Export</button>
+        </div>
+        <div class="chart-area" id="chart-activity-profile"><div class="empty-state">No data yet.</div></div>
+      </div>
+    </section>
+
+    <!-- ================= Tab 5: Box plots & stats ================= -->
+    <section class="tab-panel" id="tab-boxplots">
+      <div class="panel-head">
+        <h2>Box Plots &amp; Statistical Testing</h2>
+        <p>Per-genotype daily metrics with non-parametric statistical comparisons (Wilcoxon / Kruskal-Wallis + Dunn).</p>
+      </div>
+      <div class="card">
+        <div class="controls">
+          <label>Metric
+            <select id="box-metric">
+              <option value="sleepMinDay" selected>Total Daily Sleep (min/day)</option>
+              <option value="activityDay">Total Daily Activity (counts/day)</option>
+              <option value="boutCountDay">Sleep Bout Count (per day)</option>
+              <option value="meanBoutLenDay">Mean Bout Duration (min)</option>
+            </select>
+          </label>
+          <label>Y-axis cap (optional)
+            <input type="number" id="box-cap" placeholder="auto" min="0" step="1">
+          </label>
+          <button class="btn primary" id="btn-render-box">📊 Compute Statistics &amp; Plot</button>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title" id="box-title">Box Plot
+          <button class="btn small ghost export-btn" data-export="box">Export</button>
+        </div>
+        <div class="chart-area" id="chart-box"><div class="empty-state">No data yet.</div></div>
+      </div>
+      <div class="card">
+        <h3>Normality test (Shapiro-Wilk, per group)</h3>
+        <div class="table-wrap"><table class="data-table" id="shapiro-table"></table></div>
+        <h3 style="margin-top:16px">Group comparison</h3>
+        <div class="table-wrap"><table class="data-table" id="comparison-table"></table></div>
+        <div id="dunn-section" class="hidden">
+          <h3 style="margin-top:16px">Post-hoc Dunn's test (Bonferroni-adjusted)</h3>
+          <div class="table-wrap"><table class="data-table" id="dunn-table"></table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= Tab 6: Circadian ================= -->
+    <section class="tab-panel" id="tab-circadian">
+      <div class="panel-head">
+        <h2>Circadian Periodogram Studio</h2>
+        <p>Chi-square periodograms (Sokolove &amp; Bushell) for rhythmicity detection and period estimation.</p>
+      </div>
+      <div class="card">
+        <div class="controls">
+          <label>Phase
+            <select id="per-phase">
+              <option value="ALL" selected>All days</option>
+              <option value="LD">Entrainment (LD)</option>
+              <option value="DD">Free-running (DD)</option>
+            </select>
+          </label>
+          <label>Min period
+            <input type="number" id="per-min" value="18" min="8" max="40" step="0.5">
+          </label>
+          <label>Max period
+            <input type="number" id="per-max" value="32" min="8" max="48" step="0.5">
+          </label>
+          <label>Step
+            <select id="per-step">
+              <option value="1">1 h</option>
+              <option value="0.5" selected>0.5 h</option>
+              <option value="0.25">0.25 h</option>
+            </select>
+          </label>
+          <label>Alpha
+            <select id="per-alpha">
+              <option value="0.05">0.05</option>
+              <option value="0.01" selected>0.01</option>
+            </select>
+          </label>
+          <button class="btn primary" id="btn-render-period">📈 Run Periodogram Analysis</button>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Chi-Square Periodograms
+          <button class="btn small ghost export-btn" data-export="periodogram">Export</button>
+        </div>
+        <div class="chart-area" id="chart-periodogram"><div class="empty-state">No data yet.</div></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Peak Period Distribution
+          <button class="btn small ghost export-btn" data-export="period-dist">Export</button>
+        </div>
+        <div class="chart-area" id="chart-period-dist"><div class="empty-state">No data yet.</div></div>
+      </div>
+      <div class="card">
+        <h3>Rhythmicity classification</h3>
+        <div class="table-wrap"><table class="data-table" id="rhythmicity-table"></table></div>
+      </div>
+    </section>
+
+    <!-- ================= Tab 7: Export ================= -->
+    <section class="tab-panel" id="tab-export">
+      <div class="panel-head">
+        <h2>Data &amp; Figure Export</h2>
+        <p>Download publication figures (PNG / SVG, 300 DPI), cleaned summary tables, and a reproducible HTML report.</p>
+      </div>
+      <div class="card">
+        <h3>📊 Figures (300 DPI)</h3>
+        <div class="export-grid" id="figure-exports">
+          <button class="btn ghost" data-fig="act-ind">Individual actograms</button>
+          <button class="btn ghost" data-fig="act-group">Group actograms</button>
+          <button class="btn ghost" data-fig="whole-exp">Whole-exp activity</button>
+          <button class="btn ghost" data-fig="sleep-profile">Sleep profile</button>
+          <button class="btn ghost" data-fig="activity-profile">Activity profile</button>
+          <button class="btn ghost" data-fig="box">Box plot</button>
+          <button class="btn ghost" data-fig="periodogram">Periodogram</button>
+          <button class="btn ghost" data-fig="period-dist">Period distribution</button>
+        </div>
+        <div class="controls" style="margin-top:12px">
+          <label>Format
+            <select id="export-format">
+              <option value="png">PNG</option>
+              <option value="svg">SVG</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="card">
+        <h3>📁 Cleaned summary tables</h3>
+        <div class="row-buttons">
+          <button class="btn ghost" id="btn-export-sleep-csv">⬇️ sleep_summary.csv</button>
+          <button class="btn ghost" id="btn-export-period-csv">⬇️ period_summary.csv</button>
+          <button class="btn ghost" id="btn-export-dam">⬇️ DAM_file.txt</button>
+          <button class="btn ghost" id="btn-export-report">📄 Generate HTML report</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Analysis session overview</h3>
+        <div class="info-grid" id="session-info"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    Zantiks-to-Rethomics Behavioral Analyzer · runs entirely in your browser (all computation client-side) · v1.0
+  </footer>
+
+  <div id="toast-root"></div>
+
+  <!-- Plotly + app scripts -->
+  <script src="vendor/plotly.min.js"></script>
+  <script src="js/math.js"></script>
+  <script src="js/stats.js"></script>
+  <script src="js/periodogram.js"></script>
+  <script src="js/converter.js"></script>
+  <script src="js/metadata.js"></script>
+  <script src="js/analysis.js"></script>
+  <script src="js/colormaps.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/sampleData.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
