@@ -1,15 +1,18 @@
 # Zantiks-to-Rethomics Behavioral Analyzer
 
 A fully **client-side web application** that implements the complete workflow described in
-[`zantiks_rethomics_app_spec.md`](../zantiks_rethomics_app_spec.md): it converts raw
-**Zantiks MWP** CSV output into standard **DAM** (Drosophila Activity Monitor) format and runs a
-Rethomics-style analysis pipeline (actograms, sleep & activity profiles, box plots, statistics,
-and chi-square periodograms) — entirely in the browser. No R server, no Python, no internet
-required (Plotly.js is bundled locally).
+[`zantiks_rethomics_app_spec.md`](zantiks_rethomics_app_spec.md): it converts raw **Zantiks MWP**
+CSV output into standard **DAM** (Drosophila Activity Monitor) format and runs a Rethomics-style
+analysis pipeline (actograms, sleep & activity profiles, box plots, statistics, and chi-square
+periodograms) — entirely in the browser. No R server, no Python, no internet required (Plotly.js
+is bundled locally).
+
+This `docs/` folder is the single home for **both** the web application and its specification
+documents.
 
 ## Quick start
 
-1. Open [`app/index.html`](app/index.html) in any modern browser (Chrome, Edge, Firefox, Safari).
+1. Open [`index.html`](index.html) in any modern browser (Chrome, Edge, Firefox, Safari).
    - Double-click the file, or drag it into a browser window.
 2. **Tab 1 (Data Conversion):** click **“🎲 Load sample Zantiks data”** to try the demo dataset,
    or drop in a real Zantiks CSV (e.g. `circadian_rhythms_glasgow-20250801T141426.csv`).
@@ -24,6 +27,14 @@ required (Plotly.js is bundled locally).
    report.
 
 > 💡 Because everything runs locally, no data ever leaves your machine.
+
+## Documents
+
+| File | Description |
+|---|---|
+| [`zantiks_rethomics_app_spec.md`](zantiks_rethomics_app_spec.md) | Full functional & technical specification (Markdown): input formats, DAM conversion algorithm, visualisations, statistics, UI architecture. |
+| [`zantiks_rethomics_app_spec.json`](zantiks_rethomics_app_spec.json) | Machine-readable version of the specification (JSON). |
+| [`zantiks_rethomics_app_spec.html`](zantiks_rethomics_app_spec.html) | Rendered HTML version of the specification (open in a browser). |
 
 ## Features
 
@@ -54,21 +65,23 @@ required (Plotly.js is bundled locally).
 ## File layout
 
 ```
-app/
-├── index.html          # single-page UI (7 tabs)
-├── css/styles.css      # dark scientific theme
+docs/
+├── README.md                  # this file (project index + user guide)
+├── index.html                 # single-page UI (7 tabs) — open to launch the app
+├── css/styles.css             # dark scientific theme
 ├── js/
-│   ├── math.js         # gamma, chi-square & normal distributions, basic stats
-│   ├── stats.js        # Shapiro-Wilk, Wilcoxon, Kruskal-Wallis, Dunn
-│   ├── periodogram.js  # chi-square periodogram (Sokolove-Bushell)
-│   ├── converter.js    # Zantiks CSV ⇄ DAM conversion
-│   ├── metadata.js     # metadata parsing, validation & linking
-│   ├── analysis.js     # sleep, bouts, summaries, 24-h profiles, phase detection
-│   ├── colormaps.js    # viridis / magma / plasma / standard
-│   ├── charts.js       # Plotly chart builders & export
-│   ├── sampleData.js   # deterministic synthetic demo dataset
-│   └── main.js         # app state & wiring
-└── vendor/plotly.min.js  # bundled Plotly.js (works offline)
+│   ├── math.js                # gamma, chi-square & normal distributions, basic stats
+│   ├── stats.js               # Shapiro-Wilk, Wilcoxon, Kruskal-Wallis, Dunn
+│   ├── periodogram.js         # chi-square periodogram (Sokolove-Bushell)
+│   ├── converter.js           # Zantiks CSV ⇄ DAM conversion
+│   ├── metadata.js            # metadata parsing, validation & linking
+│   ├── analysis.js            # sleep, bouts, summaries, 24-h profiles, phase detection
+│   ├── colormaps.js           # viridis / magma / plasma / standard
+│   ├── charts.js              # Plotly chart builders & export
+│   ├── sampleData.js          # deterministic synthetic demo dataset
+│   └── main.js                # app state & wiring
+├── vendor/plotly.min.js       # bundled Plotly.js (works offline)
+└── zantiks_rethomics_app_spec.{md,json,html}   # specification documents
 ```
 
 ## Using real data
