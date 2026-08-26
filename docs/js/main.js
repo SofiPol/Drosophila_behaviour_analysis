@@ -505,7 +505,21 @@
   }
 
   /* ================= Tab 7: Exports ================= */
-  function exportFigure(name, format) {
+  async function exportFigure(name, format) {
+    if (!state.flies.length) { toast('Link a dataset first', 'info'); return; }
+    
+    // Auto-render figure if not rendered yet
+    if (!state.rendered[name]) {
+      if (name === 'whole-exp' || name === 'sleep-profile' || name === 'activity-profile') {
+        renderProfiles();
+      } else if (name === 'box') {
+        renderBoxAndStats();
+      } else if (name === 'periodogram' || name === 'period-dist') {
+        renderPeriodogram();
+      }
+      await new Promise(r => setTimeout(r, 200));
+    }
+
     const containerId = {
       'whole-exp': 'chart-whole-exp',
       'sleep-profile': 'chart-sleep-profile',
@@ -514,30 +528,33 @@
       'periodogram': 'chart-periodogram',
       'period-dist': 'chart-period-dist'
     }[name];
-    if (!containerId || !state.rendered[name]) { toast('Render this figure first', 'info'); return; }
-    CH.exportFigure($(containerId), name + '.' + format, format, 3).then(() => toast('Exported ' + name + '.' + format, 'success')).catch((e) => toast('Export failed: ' + e.message, 'error'));
+
+    const el = $(containerId);
+    if (!el) { toast('Chart container not found', 'error'); return; }
+    
+    try {
+      await CH.exportFigure(el, name + '.' + format, format, 3);
+      toast('Exported ' + name + '.' + format, 'success');
+    } catch (e) {
+      toast('Export failed: ' + e.message, 'error');
+    }
   }
 
   async function exportActograms(kind, format) {
     if (!state.flies.length) { toast('Link a dataset first', 'info'); return; }
     const bin = +$('act-bin').value;
     const cmap = $('act-colormap').value;
+    const isInd = (kind === 'ind');
+    const targetId = isInd ? 'chart-actogram-indiv' : 'chart-actogram-group';
+    let container = $(targetId);
+
     try {
-      const container = document.createElement('div');
-      container.style.cssText = 'position:fixed;left:-10000px;top:0;width:1400px;height:900px;';
-      document.body.appendChild(container);
-      if (kind === 'ind') CH.actogramIndividual(state.flies, container, { binMin: bin, colormap: cmap });
-      else CH.actogramGroup(state.flies, container, { binMin: bin, colormap: cmap });
-      // wait for plots to draw
-      await new Promise((r) => setTimeout(r, 500));
-      const url = await Plotly.toImage(container.querySelector('.js-plotly-plot') || container, { format, width: 1400, height: 900, scale: 2 });
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = (kind === 'ind' ? 'actograms_individual' : 'actograms_group') + '.' + format;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      container.remove();
+      if (!container || !container.children.length) {
+        renderActograms();
+        await new Promise(r => setTimeout(r, 300));
+      }
+      const plotEl = container.querySelector('.js-plotly-plot') || container;
+      await CH.exportFigure(plotEl, (isInd ? 'actograms_individual' : 'actograms_group') + '.' + format, format, 3);
       toast('Actograms exported', 'success');
     } catch (e) {
       toast('Export failed: ' + e.message, 'error');
@@ -546,20 +563,49 @@
 
   function exportSummaryCsv(kind) {
     if (kind === 'sleep') {
-      if (!state.flyLevel.length) { toast('Run analysis first', 'info'); return; }
+      if (!state.flyLevel.length) {
+        if (state.flies.length) renderProfiles();
+        else { toast('Link dataset first', 'info'); return; }
+      }
       C.downloadCsv(
         ['id', 'genotype', 'well', 'sex', 'replicate', 'observations', 'days', 'sleep_min_day', 'activity_day', 'bout_count_day', 'mean_bout_len_day'],
         state.flyLevel.map((r) => [r.fly.id, r.genotype, r.well, r.sex, r.replicate, r.observations, r.days,
           fmt(r.sleepMinDay, 2), fmt(r.activityDay, 2), fmt(r.boutCountDay, 2), fmt(r.meanBoutLenDay, 2)]),
         'sleep_summary.csv');
     } else {
-      if (!state.periodSummary.length) { toast('Run periodogram first', 'info'); return; }
+      if (!state.periodSummary.length) {
+        if (state.flies.length) renderPeriodogram();
+        else { toast('Link dataset first', 'info'); return; }
+      }
       C.downloadCsv(
         ['id', 'genotype', 'well', 'sex', 'period_hours', 'power', 'threshold', 'significant'],
         state.periodSummary.map((r) => [r.fly.id, r.genotype, r.well, r.sex, fmt(r.period, 2), fmt(r.power, 2), fmt(r.threshold, 2), r.significant ? 'yes' : 'no']),
         'period_summary.csv');
     }
     toast('CSV exported', 'success');
+  }
+
+  async function exportAllBulk() {
+    if (!state.flies.length) { toast('Link a dataset first', 'info'); return; }
+    toast('Starting bulk export of all figures & data…', 'info');
+    const format = $('export-format').value || 'png';
+    
+    // 1. Export summary CSVs
+    if (state.damText) C.downloadText(state.damText, 'DAM_file.txt');
+    exportSummaryCsv('sleep');
+    exportSummaryCsv('period');
+
+    // 2. Export figures sequentially
+    const figs = ['act-ind', 'act-group', 'whole-exp', 'sleep-profile', 'activity-profile', 'box', 'periodogram'];
+    for (const fig of figs) {
+      if (fig === 'act-ind' || fig === 'act-group') {
+        await exportActograms(fig === 'act-ind' ? 'ind' : 'group', format);
+      } else {
+        await exportFigure(fig, format);
+      }
+      await new Promise(r => setTimeout(r, 400));
+    }
+    toast('Bulk export completed!', 'success');
   }
 
   /* ================= HTML report ================= */
@@ -675,6 +721,7 @@
         }
       });
     });
+    $('btn-export-all-bulk').addEventListener('click', exportAllBulk);
     $('btn-export-sleep-csv').addEventListener('click', () => exportSummaryCsv('sleep'));
     $('btn-export-period-csv').addEventListener('click', () => exportSummaryCsv('period'));
     $('btn-export-dam').addEventListener('click', () => {

@@ -109,8 +109,8 @@ parse_zantiks_to_dam <- function(input_csv_path, output_dam_path) {
 
 | Visualization Name | Library / Function | X-Axis | Y-Axis / Z-Axis | Grouping / Faceting | Purpose |
 |---|---|---|---|---|---|
-| **Individual Actograms** | `ggetho::stat_tile_etho()` | Time (Days) | Time of Day (24h) / Activity (Z) | Facet by `genotype + well` | Show individual fly activity patterns over the whole experiment |
-| **Average Group Actogram** | `ggetho::stat_tile_etho()` | Time (Days) | Time of Day (24h) / Mean Activity (Z) | Facet by `genotype` | Population mean activity pattern comparison |
+| **Individual Actograms** | `ggetho::stat_bar_tile_etho()` | Time (h, 0–72h) | `period` (Days 0–N) | Facet by `region_id` | Multi-period wrapped bar actograms showing individual fly activity counts |
+| **Average Group Actogram** | `ggetho::stat_bar_tile_etho()` | Time (h, 0–72h) | `period` (Days 0–N) | Facet by `genotype` | Population mean multi-period wrapped bar actogram comparison |
 | **Whole Exp Activity Profile** | `ggetho::stat_pop_etho()` | Time (Days) | Activity Rate | Color by `genotype` | Continuous activity trajectory across entire experiment |
 | **24-Hour Sleep Profile** | `ggetho::stat_pop_etho() + stat_ld_annotations()` | Time of Day (24h wrap) | Fraction Asleep (0 to 1) | Color by `genotype` | Diurnal sleep distribution with LD light/dark bar |
 | **24-Hour Activity Profile** | `ggetho::stat_pop_etho() + stat_ld_annotations()` | Time of Day (24h wrap) | Mean Activity Count | Color by `genotype` | Diurnal activity distribution with LD light/dark bar |
@@ -148,10 +148,10 @@ parse_zantiks_to_dam <- function(input_csv_path, output_dam_path) {
 - Interactive table editor for quick metadata corrections
 
 ### Tab 3: Actogram Studio
-- Individual fly actograms (tile grid)
-- Group average actograms by genotype
-- Adjustable binning resolution (1 min, 5 min, 15 min, 30 min, 60 min)
-- Color map selector (Viridis, Magma, Plasma, Standard)
+- Individual fly multi-period wrapped bar actograms (faceted by channel `1` to `23`)
+- Group average multi-period wrapped bar actograms by genotype
+- Multiplot period length selection (24h, 48h, 72h)
+- Activity height scaling and custom color palette selector
 
 ### Tab 4: Sleep & Activity Profiles
 - Whole experiment time-series plot
@@ -169,7 +169,8 @@ parse_zantiks_to_dam <- function(input_csv_path, output_dam_path) {
 - Group period distribution box plots
 - Rhythmicity cutoff table (period, power, significance threshold)
 
-### Tab 7: Export Center
-- Batch export publication figures (PNG, SVG, PDF at 300 DPI)
-- Export cleaned metric summary tables (`sleep_summary.csv`, `period_summary.csv`)
-- Export automated R Markdown / HTML reproducible report
+### Tab 7: Data & Figure Export
+- **Bulk Download Package**: One-click download of all high-resolution figures and CSV summary data bundled in a single ZIP file (`zantiks_rethomics_export.zip`)
+- **Individual High-Res Figure Exports**: PNG and PDF exports at customizable DPI (100 to 600 DPI) and dimensions for all plots (`indiv_actogram`, `avg_actogram`, `24h_sleep`, `24h_activity`, `whole_exp_activity`, `periodogram`, `sleep_boxplots`)
+- **Data Tables Export**: Cleaned CSV downloads (`sleep_summary.csv`, `period_summary.csv`, `metadata.csv`) and converted `DAM_file.txt`
+

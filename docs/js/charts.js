@@ -93,20 +93,13 @@ window.ZCharts = (function () {
   }
 
   /**
-   * Individual actograms — one tile per fly, arranged in a responsive grid.
+   * Individual actograms — multi-period wrapped bar actograms matching DAM/Rethomics standard.
    */
   function actogramIndividual(flies, container, opts) {
     opts = opts || {};
     const binMin = opts.binMin || 30;
-    const colorscale = CM.scale(opts.colormap || 'viridis');
-    const cmax = opts.cmax || 'auto';
+    const nMulti = opts.multiplot || 3;
     container.innerHTML = '';
-
-    // compute matrices once, then robust color-scale max for consistent scaling
-    const matrices = flies.map((f) => actogramMatrix(f, binMin));
-    const globalMax = cmax === 'auto'
-      ? robustColorMax(matrices.map((m) => m.z))
-      : cmax;
 
     const grid = document.createElement('div');
     grid.className = 'actogram-grid';
@@ -118,77 +111,219 @@ window.ZCharts = (function () {
       cell.className = 'actogram-cell';
       grid.appendChild(cell);
 
-      const { days, tod, z } = matrices[fi];
-      const layout = baseLayout(fly.well + ' · ' + fly.genotype);
-      layout.width = 280;
-      layout.height = 190;
-      layout.margin = { l: 46, r: 10, t: 26, b: 28 };
-      layout.xaxis.title = { text: 'Time (Days)', font: { size: 10 } };
-      layout.yaxis.title = { text: 'ZT (h)', font: { size: 10 } };
-      layout.yaxis.autorange = 'reversed';
-      layout.showlegend = false;
-      layout.coloraxis = undefined;
+      const regionStr = (fly.regionId !== undefined && fly.regionId !== null) ? String(fly.regionId) : (fly.well || '');
+      const genoStr = fly.genotype ? (' · ' + fly.genotype) : '';
+      const cellTitle = regionStr + genoStr;
 
-      newPlot(cell, [heatmapTrace(z, days, tod, colorscale, globalMax)], layout, {
-        displayModeBar: false, responsive: true
-      });
+      const { days, tod, z } = actogramMatrix(fly, binMin);
+      const nDays = z.length;
+      const todBins = tod.length;
+      const binHours = binMin / 60;
+
+      let maxAct = 0;
+      for (let d = 0; d < nDays; d++) {
+        for (let s = 0; s < todBins; s++) {
+          if (z[d][s] > maxAct) maxAct = z[d][s];
+        }
+      }
+      if (maxAct <= 0) maxAct = 1;
+
+      const shapes = [];
+      for (let d = 0; d < nDays; d++) {
+        shapes.push({
+          type: 'line',
+          x0: 0,
+          x1: nMulti * 24,
+          y0: d,
+          y1: d,
+          line: { color: '#94a3b8', width: 0.8 }
+        });
+      }
+
+      const xSpikes = [];
+      const ySpikes = [];
+
+      for (let d = 0; d < nDays; d++) {
+        for (let m = 0; m < nMulti; m++) {
+          const targetDay = d + m;
+          if (targetDay >= nDays) continue;
+          const xOffset = m * 24;
+          for (let s = 0; s < todBins; s++) {
+            const val = z[targetDay][s];
+            if (val > 0) {
+              const x = xOffset + (s * binHours);
+              const h = Math.min(0.85, (val / maxAct) * 0.85);
+              xSpikes.push(x, x, null);
+              ySpikes.push(d, d - h, null); // Spikes rise ON TOP of baseline
+            }
+          }
+        }
+      }
+
+      const spikeTrace = {
+        type: 'scatter',
+        mode: 'lines',
+        x: xSpikes,
+        y: ySpikes,
+        line: { color: '#ffffff', width: 3.5 }, // Bold white activity bars
+        hoverinfo: 'none',
+        showlegend: false
+      };
+
+      const layout = {
+        title: {
+          text: cellTitle,
+          font: { family: 'Inter, system-ui, sans-serif', size: 14, weight: 'bold', color: '#ffffff' },
+          y: 0.96, x: 0.5, xanchor: 'center'
+        },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: '#151f33', // Dark navy background matching dark scientific theme
+        width: 320,
+        height: 230,
+        margin: { l: 50, r: 15, t: 32, b: 38 },
+        xaxis: {
+          title: { text: 'Time (h)', font: { family: 'Inter, system-ui, sans-serif', size: 12, weight: 'bold', color: '#ffffff' } },
+          range: [0, nMulti * 24],
+          tickvals: [0, 24, 48, 72].filter(v => v <= nMulti * 24),
+          gridcolor: '#243147',
+          zeroline: false,
+          tickfont: { family: 'Inter, system-ui, sans-serif', size: 11, weight: 'bold', color: '#ffffff' }
+        },
+        yaxis: {
+          title: { text: 'activity', font: { family: 'Inter, system-ui, sans-serif', size: 12, weight: 'bold', color: '#ffffff' } },
+          autorange: 'reversed',
+          dtick: 1,
+          gridcolor: 'transparent',
+          zeroline: false,
+          tickfont: { family: 'Inter, system-ui, sans-serif', size: 11, weight: 'bold', color: '#ffffff' }
+        },
+        shapes: shapes,
+        showlegend: false
+      };
+
+      newPlot(cell, [spikeTrace], layout, { displayModeBar: false, responsive: true });
     }
   }
 
   /**
-   * Average group actograms — one tile per genotype.
+   * Average group actograms — multi-period wrapped bar actograms by genotype.
    */
   function actogramGroup(flies, container, opts) {
     opts = opts || {};
     const binMin = opts.binMin || 30;
-    const colorscale = CM.scale(opts.colormap || 'viridis');
-    const cmax = opts.cmax || 'auto';
+    const nMulti = opts.multiplot || 3;
     container.innerHTML = '';
 
     const genotypes = window.ZAnalysis.uniqueGenotypes(flies);
-    const matrices = genotypes.map((g) => {
-      const gflies = flies.filter((f) => f.genotype === g);
-      const maxDay = Math.max(...gflies.map((f) => (f.dayIdx.length ? M.max(f.dayIdx) : 0)));
-      const todBins = Math.round(24 * 60 / binMin);
-      const nDays = maxDay + 1;
-      const z = [];
-      for (let d = 0; d < nDays; d++) z.push(new Array(todBins).fill(0));
-      for (const fly of gflies) {
-        for (let i = 0; i < fly.activity.length; i++) {
-          const d = Math.min(nDays - 1, fly.dayIdx[i]);
-          const s = Math.min(todBins - 1, Math.floor(fly.todHours[i] * 60 / binMin));
-          z[d][s] += fly.activity[i]; // sum across flies & bins
-        }
-      }
-      return { name: g, z, n: gflies.length };
-    });
-
-    const globalMax = cmax === 'auto'
-      ? robustColorMax(matrices.map((m) => m.z))
-      : cmax;
-
     const grid = document.createElement('div');
     grid.className = 'actogram-grid';
     container.appendChild(grid);
 
-    matrices.forEach((m, gi) => {
+    genotypes.forEach((g) => {
+      const gflies = flies.filter((f) => f.genotype === g);
       const cell = document.createElement('div');
       cell.className = 'actogram-cell';
       grid.appendChild(cell);
-      const days = m.z.map((_, d) => 'D' + (d + 1));
-      const tod = [];
-      for (let s = 0; s < Math.round(24 * 60 / binMin); s++) tod.push((s * binMin) / 60);
-      const layout = baseLayout(m.name + '  (n=' + m.n + ')');
-      layout.width = 300;
-      layout.height = 220;
-      layout.margin = { l: 50, r: 10, t: 28, b: 30 };
-      layout.xaxis.title = { text: 'Time (Days)', font: { size: 10 } };
-      layout.yaxis.title = { text: 'ZT (h)', font: { size: 10 } };
-      layout.yaxis.autorange = 'reversed';
-      layout.showlegend = false;
-      newPlot(cell, [heatmapTrace(m.z, days, tod, colorscale, globalMax)], layout, {
-        displayModeBar: false, responsive: true
-      });
+
+      const matrices = gflies.map((f) => actogramMatrix(f, binMin));
+      const nDays = Math.max(...matrices.map(m => m.z.length));
+      const todBins = Math.round(24 * 60 / binMin);
+      const binHours = binMin / 60;
+
+      const avgZ = [];
+      for (let d = 0; d < nDays; d++) {
+        const row = new Array(todBins).fill(0);
+        let count = 0;
+        for (const m of matrices) {
+          if (m.z[d]) {
+            for (let s = 0; s < todBins; s++) row[s] += (m.z[d][s] || 0);
+            count++;
+          }
+        }
+        if (count > 0) {
+          for (let s = 0; s < todBins; s++) row[s] /= count;
+        }
+        avgZ.push(row);
+      }
+
+      let maxAct = 0;
+      for (let d = 0; d < nDays; d++) {
+        for (let s = 0; s < todBins; s++) {
+          if (avgZ[d][s] > maxAct) maxAct = avgZ[d][s];
+        }
+      }
+      if (maxAct <= 0) maxAct = 1;
+
+      const shapes = [];
+      for (let d = 0; d < nDays; d++) {
+        shapes.push({
+          type: 'line', x0: 0, x1: nMulti * 24, y0: d, y1: d,
+          line: { color: '#475569', width: 0.8 }
+        });
+      }
+
+      const xSpikes = [];
+      const ySpikes = [];
+
+      for (let d = 0; d < nDays; d++) {
+        for (let m = 0; m < nMulti; m++) {
+          const targetDay = d + m;
+          if (targetDay >= nDays) continue;
+          const xOffset = m * 24;
+          for (let s = 0; s < todBins; s++) {
+            const val = avgZ[targetDay][s];
+            if (val > 0) {
+              const x = xOffset + (s * binHours);
+              const h = Math.min(0.85, (val / maxAct) * 0.85);
+              xSpikes.push(x, x, null);
+              ySpikes.push(d, d - h, null); // Spikes rise ON TOP of baseline
+            }
+          }
+        }
+      }
+
+      const spikeTrace = {
+        type: 'scatter',
+        mode: 'lines',
+        x: xSpikes,
+        y: ySpikes,
+        line: { color: '#ffffff', width: 3.5 }, // Bold white activity bars
+        hoverinfo: 'none',
+        showlegend: false
+      };
+
+      const layout = {
+        title: {
+          text: g + ' (n=' + gflies.length + ')',
+          font: { family: 'Inter, system-ui, sans-serif', size: 15, weight: 'bold', color: '#ffffff' },
+          y: 0.96, x: 0.5, xanchor: 'center'
+        },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: '#151f33',
+        width: 340,
+        height: 240,
+        margin: { l: 50, r: 15, t: 34, b: 40 },
+        xaxis: {
+          title: { text: 'Time (h)', font: { family: 'Inter, system-ui, sans-serif', size: 12, weight: 'bold', color: '#ffffff' } },
+          range: [0, nMulti * 24],
+          tickvals: [0, 24, 48, 72].filter(v => v <= nMulti * 24),
+          gridcolor: '#243147',
+          zeroline: false,
+          tickfont: { family: 'Inter, system-ui, sans-serif', size: 11, weight: 'bold', color: '#ffffff' }
+        },
+        yaxis: {
+          title: { text: 'activity', font: { family: 'Inter, system-ui, sans-serif', size: 12, weight: 'bold', color: '#ffffff' } },
+          autorange: 'reversed',
+          dtick: 1,
+          gridcolor: 'transparent',
+          zeroline: false,
+          tickfont: { family: 'Inter, system-ui, sans-serif', size: 11, weight: 'bold', color: '#ffffff' }
+        },
+        shapes: shapes,
+        showlegend: false
+      };
+
+      newPlot(cell, [spikeTrace], layout, { displayModeBar: false, responsive: true });
     });
   }
 

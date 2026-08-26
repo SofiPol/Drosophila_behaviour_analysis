@@ -308,17 +308,17 @@ convert_zantiks_to_dam <- function(input_csv, output_txt, scale_factor = 1000) {
         <tbody>
           <tr>
             <td><strong>Individual Actograms</strong></td>
-            <td><code>ggetho</code></td>
-            <td>Time (Days) / 24h Wrap</td>
-            <td>Facet by <code>genotype + well</code></td>
-            <td>Single-animal daily activity heatmaps</td>
+            <td><code>ggetho::stat_bar_tile_etho()</code></td>
+            <td>Time (h, 0–72h) / period (Days 0–N)</td>
+            <td>Facet by <code>region_id</code></td>
+            <td>Multi-period wrapped bar actogram display for individual flies</td>
           </tr>
           <tr>
             <td><strong>Average Actograms</strong></td>
-            <td><code>ggetho</code></td>
-            <td>Time (Days) / 24h Wrap</td>
+            <td><code>ggetho::stat_bar_tile_etho()</code></td>
+            <td>Time (h, 0–72h) / period (Days 0–N)</td>
             <td>Facet by <code>genotype</code></td>
-            <td>Population mean activity heatmaps</td>
+            <td>Population average multi-period wrapped bar actogram</td>
           </tr>
           <tr>
             <td><strong>24h Sleep Profile</strong></td>
@@ -367,11 +367,11 @@ convert_zantiks_to_dam <- function(input_csv, output_txt, scale_factor = 1000) {
           <ol>
             <li><strong>Data Conversion:</strong> Upload & transform Zantiks CSV</li>
             <li><strong>Metadata Manager:</strong> Verify metadata tables</li>
-            <li><strong>Actograms Studio:</strong> Heatmap tile plots</li>
+            <li><strong>Actograms Studio:</strong> Multi-period wrapped bar actograms</li>
             <li><strong>Sleep & Activity Profiles:</strong> Time-series & 24h wrapped profiles</li>
             <li><strong>Box Plots & Statistics:</strong> Wilcoxon rank-sum tests</li>
             <li><strong>Circadian Analysis:</strong> Chi-square periodograms</li>
-            <li><strong>Export Center:</strong> PNG/PDF figures & CSV downloads</li>
+            <li><strong>Data & Figure Export:</strong> Bulk ZIP export (PNG/PDF/CSV) & custom DPI figure saving</li>
           </ol>
         </div>
         <div>
