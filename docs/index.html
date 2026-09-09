@@ -55,6 +55,7 @@
       </div>
 
       <div class="card">
+        <h3>Option A: Zantiks CSV Conversion</h3>
         <div class="dropzone" id="zantiks-drop">
           <input type="file" id="zantiks-file" accept=".csv,.txt" hidden>
           <div class="dz-icon">📄</div>
@@ -63,6 +64,20 @@
         </div>
         <div class="row-buttons">
           <button class="btn ghost" id="btn-sample-zantiks">🎲 Load sample Zantiks data</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 1rem;">
+        <h3>Option B: Direct Multi-Monitor DAM Upload (Up to 10 Monitors)</h3>
+        <p class="muted" style="font-size: 0.85rem; margin-bottom: 10px;">Working directly with the DAM system? Select or drop multiple monitor files (e.g. <code>Monitor1.txt</code>, <code>Monitor2.txt</code>, ..., <code>Monitor10.txt</code>) to analyze up to 10 monitors simultaneously.</p>
+        <div class="dropzone" id="dam-drop">
+          <input type="file" id="dam-file" accept=".txt,.dat,.csv" multiple hidden>
+          <div class="dz-icon">📊</div>
+          <p><strong>Drop 1 to 10 DAM monitor files here (e.g. Monitor1.txt .. Monitor10.txt)</strong> or <span class="link">browse files</span></p>
+          <p class="dz-hint">Standard 42-column tab-separated DAM monitor text format (batch selection supported)</p>
+        </div>
+        <div class="row-buttons">
+          <button class="btn ghost" id="btn-sample-dam">📊 Load 3 Sample DAM Monitors (Monitor1.txt .. Monitor3.txt)</button>
         </div>
       </div>
 

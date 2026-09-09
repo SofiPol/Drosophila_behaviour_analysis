@@ -127,8 +127,8 @@ window.ZMetadata = (function () {
 
   /* ---------------- Linking: metadata + DAM → ethogram ---------------- */
   /**
-   * Builds the linked fly time series.
-   * @param {object} dam parsed DAM data
+   * Builds the linked fly time series across 1 or more DAM monitor files.
+   * @param {object} dam parsed DAM data or map of DAM monitor files ({'Monitor1.txt': dam1, ...})
    * @param {object} meta parsed metadata
    * @param {string} observationsFilter e.g. 'alive' ('' = all)
    * @returns {Array<object>} flies
@@ -136,16 +136,28 @@ window.ZMetadata = (function () {
   function linkMetadata(dam, meta, observationsFilter) {
     const flies = [];
     const rows = meta.rows;
+
+    const isMulti = dam && typeof dam === 'object' && !dam.rows;
+    const damMap = isMulti ? dam : null;
+    const defaultDam = isMulti ? damMap[Object.keys(damMap)[0]] : dam;
+
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const ch = parseInt(r.region_id, 10);
-      if (!Number.isInteger(ch) || ch < 1 || ch > 24) continue;
+      if (!Number.isInteger(ch) || ch < 1 || ch > 32) continue;
       if (observationsFilter && r.observations && r.observations !== observationsFilter) continue;
+
+      let targetDam = defaultDam;
+      if (isMulti && r.file) {
+        targetDam = damMap[r.file] || damMap[Object.keys(damMap).find(k => k.toLowerCase() === r.file.toLowerCase())] || defaultDam;
+      }
+
+      if (!targetDam || !targetDam.rows) continue;
 
       let start = r.start_datetime ? C.parseDatetimeRobust(r.start_datetime) : null;
       let stop = r.stop_datetime ? C.parseDatetimeRobust(r.stop_datetime) : null;
-      if (!start && dam.startDatetime) start = dam.startDatetime;
-      if (!stop && dam.endDatetime) stop = dam.endDatetime;
+      if (!start && targetDam.startDatetime) start = targetDam.startDatetime;
+      if (!stop && targetDam.endDatetime) stop = targetDam.endDatetime;
       if (!start || !stop) continue;
 
       // collect bins in window
@@ -155,7 +167,7 @@ window.ZMetadata = (function () {
       const activity = [];
       const light = [];
       const timestamps = [];
-      for (const drow of dam.rows) {
+      for (const drow of targetDam.rows) {
         const ts = drow.timestamp;
         if (!ts || ts < start || ts > stop) continue;
         const a = drow.channels[ch - 1];
@@ -171,23 +183,24 @@ window.ZMetadata = (function () {
 
       if (activity.length === 0) continue;
 
-      const id = `${r.genotype || '?'}_${r.well || 'ch' + ch}_${i + 1}`;
+      const flyFile = r.file || targetDam.file || 'DAM';
+      const id = `${flyFile}_${r.genotype || '?'}_ch${ch}_${i + 1}`;
       const hasLight = light.some((l) => l === 1);
       const hasDark = light.some((l) => l === 0);
       flies.push({
         id,
-        well: r.well || C.channelToWell(ch),
+        file: flyFile,
+        well: r.well || C.channelToWell(ch) || ('ch' + ch),
         regionId: ch,
-        genotype: r.genotype || 'unknown',
-        sex: r.sex || 'unknown',
-        replicate: r.replicate,
-        exp: r.exp || '',
+        genotype: r.genotype || 'CTRL',
+        sex: r.sex || 'NA',
+        replicate: r.replicate || 1,
+        exp: r.exp || 'Exp1',
         observations: r.observations || 'alive',
         start, stop,
-        binMin: dam.binMinutes || 1,
+        binMinutes: targetDam.binMinutes || 1,
         tHours, todHours, dayIdx, activity, light, timestamps,
-        isLD: hasLight && hasDark,
-        sleep: null
+        ldSchedule: (hasLight && hasDark) ? 'LD' : (hasDark ? 'DD' : 'LL')
       });
     }
     return flies;

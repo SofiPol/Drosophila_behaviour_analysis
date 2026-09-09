@@ -614,17 +614,83 @@ window.ZCharts = (function () {
   }
 
   /* ---------------- Export ---------------- */
-  function exportFigure(el, filename, format, scale) {
+  async function exportFigure(el, filename, format, scale) {
     format = format || 'png';
-    scale = scale || 2;
-    return Plotly.toImage(el, { format, width: el.clientWidth, height: el.clientHeight, scale }).then((url) => {
+    scale = scale || 3;
+
+    if (!el) {
+      throw new Error("Target element not found.");
+    }
+
+    // 1. Unhide parent elements if inside hidden tabs
+    const hiddenParents = [];
+    let curr = el;
+    while (curr && curr !== document.body) {
+      const style = window.getComputedStyle(curr);
+      if (style.display === 'none') {
+        hiddenParents.push({ el: curr, prevDisplay: curr.style.display });
+        curr.style.display = 'block';
+      }
+      curr = curr.parentElement;
+    }
+
+    try {
+      let dataUrl;
+      // 2. Check if element itself is a single Plotly plot
+      const plotlyPlot = el.querySelector('.js-plotly-plot') || (el.classList.contains('js-plotly-plot') ? el : null);
+
+      if (plotlyPlot && !el.classList.contains('actogram-grid') && !el.querySelector('.actogram-grid')) {
+        const w = plotlyPlot.clientWidth || el.clientWidth || 900;
+        const h = plotlyPlot.clientHeight || el.clientHeight || 500;
+        dataUrl = await Plotly.toImage(plotlyPlot, { format: format === 'svg' ? 'svg' : 'png', width: w, height: h, scale: scale });
+      } else {
+        // 3. Grid container with multiple Plotly cells (e.g. actogram-grid)
+        const cellPlots = el.querySelectorAll('.js-plotly-plot');
+        if (!cellPlots.length) {
+          throw new Error("No rendered plots found in chart container.");
+        }
+
+        const numCols = Math.min(cellPlots.length, 4);
+        const numRows = Math.ceil(cellPlots.length / numCols);
+        const cellW = cellPlots[0].clientWidth || 320;
+        const cellH = cellPlots[0].clientHeight || 230;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = numCols * cellW * scale;
+        canvas.height = numRows * cellH * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#0b1220';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let i = 0; i < cellPlots.length; i++) {
+          const cPlot = cellPlots[i];
+          const imgUrl = await Plotly.toImage(cPlot, { format: 'png', width: cellW, height: cellH, scale: scale });
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = imgUrl;
+          });
+          const col = i % numCols;
+          const row = Math.floor(i / numCols);
+          ctx.drawImage(img, col * cellW * scale, row * cellH * scale, cellW * scale, cellH * scale);
+        }
+        dataUrl = canvas.toDataURL('image/png');
+      }
+
+      // 4. Download image
       const a = document.createElement('a');
-      a.href = url;
+      a.href = dataUrl;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-    });
+    } finally {
+      // 5. Restore hidden parent display states
+      hiddenParents.forEach(item => {
+        item.el.style.display = item.prevDisplay;
+      });
+    }
   }
 
   return {

@@ -37,6 +37,11 @@
     },
     "dam_file_txt": {
       "format": "42 tab-separated columns without column headers",
+      "multi_monitor_support": {
+        "max_monitors": 10,
+        "description": "Supports batch uploading up to 10 DAM monitor files simultaneously (e.g. Monitor1.txt, Monitor2.txt, ..., Monitor10.txt).",
+        "fly_identifier": "file + '_' + region_id (e.g. Monitor1.txt_1 .. Monitor10.txt_32)"
+      },
       "columns": [
         {"col": 1, "field": "Index", "type": "Integer", "description": "1 to N row index"},
         {"col": 2, "field": "Date", "type": "String", "description": "Formatted date DD MMM YY (e.g. '01 Aug 25')"},

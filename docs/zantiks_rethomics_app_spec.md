@@ -138,9 +138,9 @@ parse_zantiks_to_dam <- function(input_csv_path, output_dam_path) {
 - Workflow Indicator: Upload -> Convert -> Verify -> Analyze -> Export
 
 ### Tab 1: Data Conversion & Ingestion
-- Upload Zantiks CSV File(s)
-- Live preview of extracted start datetime, duration, and well channels
-- One-click **"Convert to DAM Format"** button with download option for transformed `.txt` file
+- **Option A (Zantiks CSV Conversion)**: Upload raw Zantiks CSV output, preview start datetime, duration, and well channels, then convert to standard 42-column DAM format.
+- **Option B (Direct Multi-Monitor DAM Upload)**: Upload multiple pre-existing DAM monitor tab-separated files simultaneously (up to 10 monitors, e.g. `Monitor1.txt`, `Monitor2.txt`, ..., `Monitor10.txt`) to bypass Zantiks conversion and analyze multi-monitor datasets concurrently.
+- Live preview of loaded DAM datasets (monitor counts, total channels, row counts, date ranges, bin sizes).
 
 ### Tab 2: Metadata Management
 - Upload Metadata CSV File

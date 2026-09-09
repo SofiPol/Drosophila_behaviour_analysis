@@ -76,24 +76,36 @@
     }
   }
 
-  function setupDropzone(dz, input, onFile) {
+  function setupDropzoneMulti(dz, input, onFiles) {
     dz.addEventListener('click', () => input.click());
     input.addEventListener('change', () => {
-      const f = input.files[0];
-      if (!f) return;
-      const reader = new FileReader();
-      reader.onload = (e) => onFile(e.target.result, f.name);
-      reader.readAsText(f);
+      const files = Array.from(input.files);
+      if (!files.length) return;
+      readFiles(files, onFiles);
     });
     ['dragover', 'dragenter'].forEach((ev) =>
       dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('dragover'); }));
     ['dragleave', 'drop'].forEach((ev) =>
       dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('dragover'); }));
     dz.addEventListener('drop', (e) => {
-      const f = e.dataTransfer.files[0];
-      if (!f) return;
+      const files = Array.from(e.dataTransfer.files);
+      if (!files.length) return;
+      readFiles(files, onFiles);
+    });
+  }
+
+  function readFiles(files, callback) {
+    const results = [];
+    let count = 0;
+    files.forEach((f, idx) => {
       const reader = new FileReader();
-      reader.onload = (ev) => onFile(ev.target.result, f.name);
+      reader.onload = (ev) => {
+        results[idx] = { name: f.name, text: ev.target.result };
+        count++;
+        if (count === files.length) {
+          callback(results);
+        }
+      };
       reader.readAsText(f);
     });
   }
@@ -103,7 +115,63 @@
       `<div class="info-item"><div class="k">${it.k}</div><div class="v">${it.v}</div></div>`).join('');
   }
 
-  /* ================= Tab 1: Zantiks parsing ================= */
+  /* ================= Tab 1: Zantiks / Multi-Monitor DAM parsing ================= */
+  function handleMultipleDamFiles(fileItems) {
+    try {
+      state.dams = state.dams || {};
+      let totalRows = 0;
+      let loadedNames = [];
+
+      fileItems.forEach((fi) => {
+        const dam = C.parseDam(fi.text, fi.name);
+        if (dam && dam.nRows) {
+          state.dams[fi.name] = dam;
+          totalRows += dam.nRows;
+          loadedNames.push(fi.name);
+        }
+      });
+
+      if (!loadedNames.length) throw new Error('No valid DAM monitor rows found in uploaded files.');
+
+      const firstName = loadedNames[0];
+      state.dam = state.dams[firstName];
+      state.damText = fileItems.find(f => f.name === firstName)?.text || '';
+      state.zantiksName = loadedNames.join(', ');
+
+      const totalMonitors = Object.keys(state.dams).length;
+      $('dam-badge').textContent = totalMonitors + ' Monitor File(s) · ' + (totalMonitors * 24) + ' Channels Total';
+      $('dam-summary').textContent = `Multi-Monitor Mode: Loaded ${totalMonitors} DAM Monitor file(s) [${loadedNames.join(', ')}] · Total ~${totalRows} rows across monitors. Ready for metadata manager!`;
+
+      const lines = state.damText.trim().split('\n').slice(0, 10);
+      const head = ['Index', 'Date', 'Time', 'Light', ...Array.from({ length: 24 }, (_, i) => 'Ch' + (i + 1))];
+      const body = lines.map((l) => l.split('\t'));
+      const tbl = $('dam-preview-table');
+      tbl.innerHTML = '<thead><tr>' + head.map((h) => `<th>${h}</th>`).join('') + '</tr></thead><tbody>' +
+        body.map((r) => '<tr>' + r.map((c, i) => `<td class="${i >= 4 ? 'num' : ''}">${c}</td>`).join('') + '</tr>').join('') + '</tbody>';
+
+      $('zantiks-info-card').classList.add('hidden');
+      $('dam-result-card').classList.remove('hidden');
+      setWorkflow(2);
+      toast(`Loaded ${loadedNames.length} DAM monitor file(s) successfully!`, 'success');
+    } catch (err) {
+      toast('Could not parse DAM monitor files: ' + err.message, 'error');
+    }
+  }
+
+  function handleDamText(text, name) {
+    handleMultipleDamFiles([{ name, text }]);
+  }
+
+  function handleZantiksOrDamText(fileItems) {
+    const items = Array.isArray(fileItems) ? fileItems : [fileItems];
+    const isDam = items.some(fi => fi.name.endsWith('.txt') || fi.name.toLowerCase().includes('monitor') || /^\d+\s+\d{1,2}\s+[A-Za-z]{3}/.test((fi.text || '').trim().slice(0, 100)));
+    if (isDam) {
+      handleMultipleDamFiles(items);
+    } else {
+      handleZantiksText(items[0].text, items[0].name);
+    }
+  }
+
   function handleZantiksText(text, name) {
     try {
       const parsed = C.parseZantiksCsv(text, name);
@@ -542,8 +610,6 @@
 
   async function exportActograms(kind, format) {
     if (!state.flies.length) { toast('Link a dataset first', 'info'); return; }
-    const bin = +$('act-bin').value;
-    const cmap = $('act-colormap').value;
     const isInd = (kind === 'ind');
     const targetId = isInd ? 'chart-actogram-indiv' : 'chart-actogram-group';
     let container = $(targetId);
@@ -553,8 +619,7 @@
         renderActograms();
         await new Promise(r => setTimeout(r, 300));
       }
-      const plotEl = container.querySelector('.js-plotly-plot') || container;
-      await CH.exportFigure(plotEl, (isInd ? 'actograms_individual' : 'actograms_group') + '.' + format, format, 3);
+      await CH.exportFigure(container, (isInd ? 'actograms_individual' : 'actograms_group') + '.' + format, format, 3);
       toast('Actograms exported', 'success');
     } catch (e) {
       toast('Export failed: ' + e.message, 'error');
@@ -668,14 +733,23 @@
     });
 
     // dropzones
-    setupDropzone($('zantiks-drop'), $('zantiks-file'), handleZantiksText);
-    setupDropzone($('metadata-drop'), $('metadata-file'), handleMetadataText);
+    setupDropzoneMulti($('zantiks-drop'), $('zantiks-file'), handleZantiksOrDamText);
+    setupDropzoneMulti($('dam-drop'), $('dam-file'), handleMultipleDamFiles);
+    setupDropzoneMulti($('metadata-drop'), $('metadata-file'), (items) => handleMetadataText(items[0].text, items[0].name));
 
     // sample data
     $('btn-sample-zantiks').addEventListener('click', (e) => {
       e.stopPropagation();
       const d = window.ZSampleData.generateSampleData();
       handleZantiksText(d.zantiksCsv, d.zantiksName);
+    });
+    $('btn-sample-dam').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const demo = window.ZSampleData.generateSampleMultiDamTexts();
+      handleMultipleDamFiles(demo.files);
+      if (demo.metadataCsv) {
+        handleMetadataText(demo.metadataCsv, demo.metadataName);
+      }
     });
     $('btn-sample-metadata').addEventListener('click', (e) => {
       e.stopPropagation();
