@@ -294,7 +294,51 @@ convert_zantiks_to_dam <- function(input_csv, output_txt, scale_factor = 1000) {
     </section>
 
     <section>
-      <h2>4. Visualizations & Plots</h2>
+      <h2>4. Morning & Evening Anticipation Index (MAI & EAI) Engine</h2>
+      <p>In <em>Drosophila</em> circadian biology under 12:12 Light:Dark (LD) cycles, locomotor activity exhibits characteristic morning and evening peaks. The <strong>Anticipation Index (AI)</strong> quantifies whether flies actively accelerate activity prior to environmental light transitions, distinguishing endogenous circadian pacemaker output from acute masking/startle reactions.</p>
+
+      <h3>4.1 Mathematical Formulation & Core Algorithm</h3>
+      <p>The anticipation index computes the ratio of locomotor activity in the 3-hour window ($w_3$) immediately preceding a light transition to the broader 6-hour pre-transition window ($w_6$):</p>
+      
+      <pre><code>def anticipation_index(activity_by_zt, transition_zt, binsize_h):
+    # activity_by_zt: counts for one fly, one day, indexed by bin start (ZT hours)
+    w3 = sum(a for zt, a in activity_by_zt if in_window(zt, transition_zt - 3, transition_zt))
+    w6 = sum(a for zt, a in activity_by_zt if in_window(zt, transition_zt - 6, transition_zt))
+    return w3 / w6 if w6 > 0 else None   # optionally subtract 0.5</code></pre>
+
+      <div class="grid-2" style="margin-top: 1rem;">
+        <div>
+          <h3>Morning Anticipation Index (MAI)</h3>
+          <ul>
+            <li><strong>Transition Time:</strong> <code>transition_zt = 0</code> (or <code>24</code>, Lights-ON).</li>
+            <li><strong>3h Anticipation Window ($w_3$):</strong> ZT 21 to ZT 24 (or ZT -3 to 0).</li>
+            <li><strong>6h Reference Window ($w_6$):</strong> ZT 18 to ZT 24 (or ZT -6 to 0).</li>
+            <li><strong>Biological Basis:</strong> Governed by PDF-positive s-LNv morning pacemaker neurons.</li>
+            <li><strong>Formula:</strong> <code>MAI = Activity(ZT21-24) / Activity(ZT18-24)</code></li>
+          </ul>
+        </div>
+        <div>
+          <h3>Evening Anticipation Index (EAI)</h3>
+          <ul>
+            <li><strong>Transition Time:</strong> <code>transition_zt = 12</code> (Lights-OFF in standard LD 12:12).</li>
+            <li><strong>3h Anticipation Window ($w_3$):</strong> ZT 9 to ZT 12.</li>
+            <li><strong>6h Reference Window ($w_6$):</strong> ZT 6 to ZT 12.</li>
+            <li><strong>Biological Basis:</strong> Governed by PDF-negative LNd / 5th s-LNv evening oscillator neurons.</li>
+            <li><strong>Formula:</strong> <code>EAI = Activity(ZT9-12) / Activity(ZT6-12)</code></li>
+          </ul>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 1.2rem;">4.2 Baseline Normalization & Handling</h3>
+      <ul>
+        <li><strong>Neutral Baseline (0.5):</strong> For evenly distributed activity, $w_3 / w_6 = 3/6 = 0.5$. Values $> 0.5$ indicate genuine pre-transition anticipation.</li>
+        <li><strong>Optional Zero-Centering:</strong> Subtracting $0.5$ centers the scale around $0.0$ ($[-0.5, +0.5]$), where values $> 0$ denote positive anticipation and values $< 0$ denote activity deceleration.</li>
+        <li><strong>Quiescent Flies:</strong> If $w_6 = 0$ (no activity across the 6-hour window), the function safely returns <code>None</code> (or <code>NA</code> in R) to prevent division by zero.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>5. Visualizations & Plots</h2>
       <table>
         <thead>
           <tr>
@@ -332,7 +376,21 @@ convert_zantiks_to_dam <- function(input_csv, output_txt, scale_factor = 1000) {
             <td><code>ggetho</code></td>
             <td>24h Wrapped / Activity Rate</td>
             <td>Color by <code>genotype</code></td>
-            <td>Diurnal activity profile with LD bars</td>
+            <td>Diurnal activity profile with LD bars and anticipation window overlays ($w_3$ & $w_6$)</td>
+          </tr>
+          <tr>
+            <td><strong>Morning Anticipation Box Plot (MAI)</strong></td>
+            <td><code>ggplot2</code></td>
+            <td>Genotype / Morning AI</td>
+            <td>Fill by <code>genotype</code></td>
+            <td>Statistical comparison of lights-on anticipation across groups</td>
+          </tr>
+          <tr>
+            <td><strong>Evening Anticipation Box Plot (EAI)</strong></td>
+            <td><code>ggplot2</code></td>
+            <td>Genotype / Evening AI</td>
+            <td>Fill by <code>genotype</code></td>
+            <td>Statistical comparison of lights-off anticipation across groups</td>
           </tr>
           <tr>
             <td><strong>Sleep Box Plots</strong></td>
@@ -360,7 +418,7 @@ convert_zantiks_to_dam <- function(input_csv, output_txt, scale_factor = 1000) {
     </section>
 
     <section>
-      <h2>5. User Interface Architecture</h2>
+      <h2>6. User Interface Architecture</h2>
       <div class="grid-2">
         <div>
           <h3>App Navigation Tabs</h3>
@@ -368,17 +426,18 @@ convert_zantiks_to_dam <- function(input_csv, output_txt, scale_factor = 1000) {
             <li><strong>Data Conversion:</strong> Upload & transform Zantiks CSV</li>
             <li><strong>Metadata Manager:</strong> Verify metadata tables</li>
             <li><strong>Actograms Studio:</strong> Multi-period wrapped bar actograms</li>
-            <li><strong>Sleep & Activity Profiles:</strong> Time-series & 24h wrapped profiles</li>
-            <li><strong>Box Plots & Statistics:</strong> Wilcoxon rank-sum tests</li>
+            <li><strong>Sleep & Activity Profiles:</strong> Time-series & 24h wrapped profiles with anticipation window shading</li>
+            <li><strong>Box Plots & Statistics:</strong> Sleep, activity, and Morning/Evening Anticipation Index box plots with zero-centering options</li>
             <li><strong>Circadian Analysis:</strong> Chi-square periodograms</li>
-            <li><strong>Data & Figure Export:</strong> Bulk ZIP export (PNG/PDF/CSV) & custom DPI figure saving</li>
+            <li><strong>Data & Figure Export:</strong> Bulk ZIP export (PNG/PDF/CSV including <code>anticipation_summary.csv</code>) & custom DPI figure saving</li>
           </ol>
         </div>
         <div>
           <h3>Statistical Test Suite</h3>
           <ul>
-            <li><strong>Non-Parametric 2-Group:</strong> Wilcoxon rank-sum test (Mann-Whitney U)</li>
-            <li><strong>Multi-Group:</strong> Kruskal-Wallis test</li>
+            <li><strong>Non-Parametric 2-Group:</strong> Wilcoxon rank-sum test (Mann-Whitney U) on sleep, activity, MAI, and EAI</li>
+            <li><strong>Multi-Group:</strong> Kruskal-Wallis test with post-hoc Dunn test</li>
+            <li><strong>Anticipation Significance:</strong> One-sample Wilcoxon signed-rank test against baseline (0.5 or 0.0)</li>
             <li><strong>Rhythmicity Criteria:</strong> Chi-Square periodogram peak power vs significance threshold</li>
           </ul>
         </div>

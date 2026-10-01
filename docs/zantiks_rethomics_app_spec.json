@@ -112,7 +112,25 @@
       "x_axis": "Time of Day (24h wrapped)",
       "y_axis": "Mean Activity Count",
       "color": "genotype",
-      "purpose": "Diurnal activity distribution with LD light/dark bar annotations"
+      "purpose": "Diurnal activity distribution with LD light/dark bar annotations and highlighted anticipation calculation windows (w3 and w6)"
+    },
+    {
+      "name": "Morning Anticipation Box Plot (MAI)",
+      "library": "ggplot2",
+      "function": "geom_boxplot() + geom_jitter()",
+      "x_axis": "genotype",
+      "y_axis": "Morning Anticipation Index (MAI)",
+      "fill": "genotype",
+      "purpose": "Statistical comparison of morning lights-on anticipation across experimental groups"
+    },
+    {
+      "name": "Evening Anticipation Box Plot (EAI)",
+      "library": "ggplot2",
+      "function": "geom_boxplot() + geom_jitter()",
+      "x_axis": "genotype",
+      "y_axis": "Evening Anticipation Index (EAI)",
+      "fill": "genotype",
+      "purpose": "Statistical comparison of evening lights-off anticipation across experimental groups"
     },
     {
       "name": "Daily Sleep Box Plot",
@@ -151,9 +169,37 @@
       "purpose": "Circadian rhythmicity and period determination"
     }
   ],
+  "anticipation_index_analysis": {
+    "description": "Quantifies the proportion of activity occurring in the 3 hours immediately preceding a light transition relative to the 6 hours preceding the transition, distinguishing endogenous circadian anticipation from acute startle masking.",
+    "python_algorithm": "def anticipation_index(activity_by_zt, transition_zt, binsize_h):\n    # activity_by_zt: counts for one fly, one day, indexed by bin start (ZT hours)\n    w3 = sum(a for zt, a in activity_by_zt if in_window(zt, transition_zt - 3, transition_zt))\n    w6 = sum(a for zt, a in activity_by_zt if in_window(zt, transition_zt - 6, transition_zt))\n    return w3 / w6 if w6 > 0 else None   # optionally subtract 0.5",
+    "indices": [
+      {
+        "name": "Morning Anticipation Index (MAI)",
+        "transition_zt": 0,
+        "w3_window": "ZT 21 to ZT 24 (or ZT -3 to 0)",
+        "w6_window": "ZT 18 to ZT 24 (or ZT -6 to 0)",
+        "formula": "sum(Activity[ZT21-24]) / sum(Activity[ZT18-24])",
+        "biological_role": "Assesses morning oscillator anticipation of lights-on transition (regulated by s-LNvs / PDF)"
+      },
+      {
+        "name": "Evening Anticipation Index (EAI)",
+        "transition_zt": 12,
+        "w3_window": "ZT 9 to ZT 12",
+        "w6_window": "ZT 6 to ZT 12",
+        "formula": "sum(Activity[ZT9-12]) / sum(Activity[ZT6-12])",
+        "biological_role": "Assesses evening oscillator anticipation of lights-off transition (regulated by LNds / 5th s-LNv)"
+      }
+    ],
+    "baseline_options": {
+      "neutral_baseline": 0.5,
+      "zero_centered_option": "Subtract 0.5 from ratio (positive values indicate anticipation > baseline, negative indicate activity suppression)",
+      "zero_activity_handling": "Returns null/NA if w6 == 0 to avoid division by zero"
+    }
+  },
   "statistical_tests": {
-    "two_group_comparison": "Wilcoxon rank-sum test (Mann-Whitney U test)",
+    "two_group_comparison": "Wilcoxon rank-sum test (Mann-Whitney U test) for sleep, activity, MAI, and EAI",
     "multi_group_comparison": "Kruskal-Wallis test with post-hoc Dunn test",
+    "anticipation_significance": "One-sample Wilcoxon signed-rank test against baseline (0.5 or 0.0) to confirm significant anticipation",
     "rhythmicity": "Chi-Square Periodogram peak power vs significance threshold"
   },
   "data_and_figure_export": {
@@ -168,6 +214,8 @@
         "Average Group Actograms",
         "24-Hour Sleep Profile",
         "24-Hour Activity Profile",
+        "Morning Anticipation Box Plot",
+        "Evening Anticipation Box Plot",
         "Whole Experiment Activity",
         "Chi-Square Periodograms",
         "Sleep & Activity Box Plots"
@@ -177,6 +225,7 @@
       "formats": ["CSV", "TXT"],
       "supported_datasets": [
         "sleep_summary.csv",
+        "anticipation_summary.csv",
         "period_summary.csv",
         "converted_DAM.txt",
         "experimental_metadata.csv"
@@ -195,7 +244,7 @@
       "Metadata Manager",
       "Actograms",
       "Sleep & Activity Profiles",
-      "Sleep & Activity Box Plots",
+      "Sleep & Activity Box Plots (including MAI & EAI)",
       "Circadian Analysis",
       "Data & Figure Export"
     ]
