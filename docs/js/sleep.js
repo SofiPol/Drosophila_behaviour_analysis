@@ -344,6 +344,7 @@
       animal,
       id: animal.id,
       group: animal.group,
+      genotype: animal.genotype,
       sex: animal.sex,
       treatment: animal.treatment,
       well: animal.well,
@@ -688,7 +689,7 @@
     for (let i = 0; i < animal.activity.length; i++) {
       if (!mask[i]) continue;
       rows.push([
-        animal.id, animal.group,
+        animal.id, animal.group, animal.genotype,
         (animal.tHours[i]).toFixed(4),
         animal.activity[i] === undefined || animal.activity[i] === null ? 'NA' : animal.activity[i],
         state[i] === STATE.MISSING ? 'NA' : (state[i] === STATE.ACTIVE ? '1' : '0'),

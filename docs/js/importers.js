@@ -345,7 +345,8 @@
     const parsed = C.csvParse(text);
     const rows = parsed.rows;
     if (rows.length < 2) throw new Error('The CSV needs a header row and at least one data row.');
-    const header = rows[0].map((h) => String(h).trim());
+    const cleanHeader = (h) => String(h ?? '').replace(/^\uFEFF/, '').trim();
+    const header = rows[0].map(cleanHeader);
     const body = rows.slice(1);
     const numeric = numericColumns(body);
     const lower = header.map((h) => h.toLowerCase());
@@ -982,6 +983,7 @@
         channel: cfg.channel ?? null,
         well: cfg.well ?? key,
         group: cfg.group || 'All',
+        genotype: cfg.genotype || '',
         sex: cfg.sex || '',
         treatment: cfg.treatment || '',
         condition: cfg.condition || '',
@@ -1105,7 +1107,7 @@
   function parseMetadata(text) {
     const parsed = C.csvParse(text);
     if (parsed.rows.length < 2) throw new Error('Metadata needs a header and at least one row.');
-    const header = parsed.rows[0].map((h) => String(h).trim());
+    const header = parsed.rows[0].map((h) => String(h ?? '').replace(/^\uFEFF/, '').trim());
     const lower = header.map((h) => h.toLowerCase());
     const rows = [];
     for (let r = 1; r < parsed.rows.length; r++) {
@@ -1120,17 +1122,32 @@
       }
       return null;
     };
+    const genotype = find([/genotype/, /genotype.?id/, /strain/, /allele/, /^line$/, /line.?id/]);
     return {
       header, rows,
       suggested: {
-        file: find([/^file$/, /monitor/, /source/]),
-        channel: find([/channel/, /region_id/, /^roi$/, /well/]),
-        id: find([/animal.?id/, /^id$/, /subject/, /name/]),
-        group: find([/genotype/, /group/, /condition/, /treatment/, /strain/]),
+        file: find([/^file$/, /file.?name/, /monitor/, /source/]),
+        channel: find([/channel/, /region.?id/, /^roi$/, /well/]),
+        id: find([/animal.?id/, /fly.?id/, /subject/, /^id$/, /name/]),
+        genotype,
+        group: find([/^group$/, /experimental.?group/, /cohort/, /condition/, /treatment/]) || genotype,
         sex: find([/sex/, /gender/]),
-        treatment: find([/treatment/, /condition/]),
+        treatment: find([/treatment/, /condition/, /drug/, /diet/]),
         well: find([/well/, /roi/, /region/])
       }
+    };
+  }
+
+  function suggestMetadataMapping(meta) {
+    const s = meta && meta.suggested ? meta.suggested : {};
+    return {
+      file: s.file || null,
+      channel: s.channel || null,
+      id: s.id || null,
+      group: s.group || null,
+      genotype: s.genotype || null,
+      sex: s.sex || null,
+      treatment: s.treatment || null
     };
   }
 
@@ -1142,6 +1159,8 @@
     const rows = meta.rows;
     const norm = (v) => String(v ?? '').trim().toLowerCase();
     const normFile = (v) => norm(v).replace(/\.[a-z0-9]+$/, '');
+    let matched = 0;
+    const matchedRows = new Set();
     for (const cfg of configs) {
       let hit = null;
       for (const r of rows) {
@@ -1156,12 +1175,28 @@
         if ((idMatch || (chMatch && fileMatch))) { hit = r; break; }
       }
       if (!hit) continue;
+      matched++;
+      matchedRows.add(hit);
+      if (mapping.genotype && hit[mapping.genotype]) cfg.genotype = hit[mapping.genotype];
       if (mapping.group && hit[mapping.group]) cfg.group = hit[mapping.group];
+      // If the metadata only supplies a genotype, use it as the grouping key
+      // so every downstream analysis automatically groups by genotype.
+      if (!cfg.genotype && mapping.group && hit[mapping.group] && /genotype|strain|allele|line/i.test(mapping.group)) {
+        cfg.genotype = hit[mapping.group];
+      }
+      if ((!cfg.group || cfg.group === 'All') && cfg.genotype) cfg.group = cfg.genotype;
       if (mapping.sex && hit[mapping.sex]) cfg.sex = hit[mapping.sex];
       if (mapping.treatment && hit[mapping.treatment]) cfg.treatment = hit[mapping.treatment];
       cfg.metadata = Object.assign({}, cfg.metadata, hit);
       cfg.include = !/dead|exclude|no/i.test(hit.observations || '') || /alive/i.test(hit.observations || '');
     }
+    configs.metaStats = {
+      matched,
+      total: configs.length,
+      metadataRows: rows.length,
+      matchedRows: matchedRows.size,
+      unmatched: configs.length - matched
+    };
     return configs;
   }
 
@@ -1171,7 +1206,7 @@
     for (let ch = 1; ch <= dam.nChannels; ch++) {
       const key = 'Ch' + ch;
       const label = 'Channel ' + ch;
-      const cfg = { key, id: `${dam.file}_ch${ch}`, channel: ch, well: 'Ch' + ch, group: 'All', include: true, file: dam.file };
+      const cfg = { key, id: `${dam.file}_ch${ch}`, channel: ch, well: 'Ch' + ch, group: 'All', genotype: '', include: true, file: dam.file };
       if (metadataMap && metadataMap[ch]) Object.assign(cfg, metadataMap[ch]);
       configs.push(cfg);
     }
@@ -1185,6 +1220,7 @@
       channel: i + 1,
       well: ds.labels && ds.labels[key] ? ds.labels[key] : key,
       group: 'All',
+      genotype: '',
       include: true,
       file: ds.name || ''
     }));
@@ -1195,7 +1231,7 @@
     parseDam, parseZantiks, zantiksToDam, parseEthoscopeDb, parseEthoscopeCsv,
     autoMapGeneric, buildGeneric, parseFile, parseText, readFileAsText, readFileAsArrayBuffer,
     regularise, addCircadianTime, inferLightsOn, classifyDayPhases, dayPhaseMap, assembleAnimals,
-    detectDeadRun, analysisMask, maskStats, parseMetadata, applyMetadata,
+    detectDeadRun, analysisMask, maskStats, parseMetadata, suggestMetadataMapping, applyMetadata,
     configsFromDam, configsFromWide, movingFromDistance, inferBinMinutes
   };
 })(window);

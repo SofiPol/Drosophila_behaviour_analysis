@@ -24,6 +24,7 @@ Every imported file is converted to a regular time grid. The canonical record fo
 - **Zantiks MWP** — quoted CSV with `RUNTIME`, `L_OR_D` and `A1…D6` wells. Large files are parsed line-by-line. The conversion to standard DAM writes 5 metadata columns, the light flag and 32 channels; activity is multiplied by 1000 to preserve sub-unit precision.
 - **Generic CSV/TSV/Excel** — wide (one column per animal) or long (animal ID + value). The user chooses the timestamp/elapsed-time column, light column and animal columns. Excel sheets are read with SheetJS.
 - **Ethoscope SQLite** — `ROI_1…ROI_n` tables are queried with sql.js. Distance is `10^(xy_dist_log10x1000/1000)`; velocity is distance/dt. Movement is the maximum velocity in 10 s windows above the threshold (default 1.0 relative units). Ethoscope CSV exports with the same columns are also accepted.
+- **Metadata CSV** — one row per animal, joined automatically by file/monitor, channel/well/ROI or animal ID. Genotype, experimental group, sex and treatment are copied to the animal records; arbitrary metadata columns are retained. If no group column exists, genotype becomes the grouping variable. Metadata can be uploaded before or after the behavioural files.
 
 ### Time and ZT0
 

@@ -49,7 +49,7 @@ A workflow is included at `.github/workflows/pages.yml`. Set **Settings → Page
 
 | Section | Analysis |
 |---|---|
-| **01 Import** | DAM (24/32 channels, multiple monitors), Zantiks MWP, generic CSV/TSV/Excel (wide or long), ethoscope SQLite/CSV. Animal table, metadata join, QC flags, group assignment. |
+| **01 Import** | DAM (24/32 channels, multiple monitors), Zantiks MWP, generic CSV/TSV/Excel (wide or long), ethoscope SQLite/CSV. Animal table, automatic metadata join (including genotype), QC flags and group assignment. |
 | **02 Settings** | Analysis bin, cycle length, ZT0, phase window, sleep thresholds, dead/missing rules, period search range, rhythmic criteria, anticipation/onset parameters, rebound windows, display options. |
 | **03 Overview** | KPIs, group summary, recording timeline, activity profile, QC table. |
 | **04 Actograms** | Individual and group-average single/double-plotted bar actograms; dark-phase shading, period line, sleep actogram, custom binning and scaling. |
@@ -85,7 +85,9 @@ Quoted CSV with `RUNTIME`, `UNIT`, `TEMPERATURE`, `L_OR_D`, `DAY`, `HOUR`, `TIME
 
 ### Metadata
 
-Upload a CSV with one row per animal. The app suggests columns for file/monitor, channel/ROI, animal ID, group/genotype, sex and treatment; you can remap them before applying. You can also edit group names directly in the animal table.
+Upload a CSV with one row per animal. The app automatically detects and links metadata by **file/monitor**, **channel/well/ROI** or **animal ID**. Genotype is carried through to the animal table, exports, group summaries and the statistics grouping menu; group, sex and treatment are linked at the same time. If a metadata file has a genotype but no separate group, genotype becomes the grouping variable.
+
+The minimum useful columns are a join key (`file`, `channel` or `animal_id`) plus `genotype`. Other columns are retained in the manifest. Use the mapping controls to correct a join or add an experimental group; the match count is shown immediately. Metadata can be uploaded before or after the behavioural files and is applied automatically when the dataset is used. You can also edit genotype, group, sex and treatment directly in the animal table.
 
 ---
 

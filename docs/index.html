@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css?v=2.0.3">
+<link rel="stylesheet" href="css/styles.css?v=2.0.6">
 </head>
 <body>
 <div class="app-shell">
@@ -112,7 +112,7 @@
       <article class="card hidden" id="dataset-card">
         <header class="card-head">
           <span class="card-index">04</span>
-          <div><h2>Animals &amp; groups</h2><p>Edit group names directly. Upload metadata to join by file, channel or animal ID.</p></div>
+          <div><h2>Animals &amp; groups</h2><p>Edit details directly. Upload metadata to automatically link animals by file, channel/well or animal ID and add genotype, group, sex and treatment.</p></div>
           <span class="badge" id="animal-badge">0 animals</span>
         </header>
         <div class="qc-strip" id="qc-summary"></div>
@@ -460,7 +460,7 @@
         <div class="controls">
           <label>Metric<select id="stat-metric"></select></label>
           <label>Group by
-            <select id="stat-groupvar"><option value="group">Group</option><option value="sex">Sex</option><option value="treatment">Treatment</option></select>
+            <select id="stat-groupvar"><option value="group">Group</option><option value="genotype">Genotype</option><option value="sex">Sex</option><option value="treatment">Treatment</option></select>
           </label>
           <label>Correction<select id="stat-correction"><option value="holm">Holm</option><option value="bh">Benjamini–Hochberg</option><option value="bonferroni">Bonferroni</option></select></label>
           <label>Y min<input type="number" id="stat-ymin" placeholder="auto" step="any"></label>
@@ -580,14 +580,14 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/sql-wasm.js"></script>
-<script src="js/core.js?v=2.0.3"></script>
-<script src="js/stats.js?v=2.0.3"></script>
-<script src="js/importers.js?v=2.0.3"></script>
-<script src="js/sleep.js?v=2.0.3"></script>
-<script src="js/circadian.js?v=2.0.3"></script>
-<script src="js/phase.js?v=2.0.3"></script>
-<script src="js/charts.js?v=2.0.3"></script>
-<script src="js/sample.js?v=2.0.3"></script>
-<script src="js/app.js?v=2.0.3"></script>
+<script src="js/core.js?v=2.0.6"></script>
+<script src="js/stats.js?v=2.0.6"></script>
+<script src="js/importers.js?v=2.0.6"></script>
+<script src="js/sleep.js?v=2.0.6"></script>
+<script src="js/circadian.js?v=2.0.6"></script>
+<script src="js/phase.js?v=2.0.6"></script>
+<script src="js/charts.js?v=2.0.6"></script>
+<script src="js/sample.js?v=2.0.6"></script>
+<script src="js/app.js?v=2.0.6"></script>
 </body>
 </html>

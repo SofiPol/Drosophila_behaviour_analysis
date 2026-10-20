@@ -34,6 +34,8 @@
     animals: [],
     phaseMap: new Map(),
     metadata: null,
+    metadataFile: null,
+    metadataStats: null,
     metaMapping: null,
     summaries: [],
     circadian: [],
@@ -332,8 +334,8 @@
       toast('Channels with zero total activity excluded.', 'info');
     });
     $('btn-meta-template-global').addEventListener('click', () => {
-      const headers = ['file', 'channel', 'animal_id', 'group', 'sex', 'treatment', 'observations'];
-      const example = ['Monitor1.txt', '1', 'fly_01', 'Control', 'female', 'vehicle', 'alive'];
+      const headers = ['file', 'channel', 'animal_id', 'genotype', 'group', 'sex', 'treatment', 'observations'];
+      const example = ['Monitor1.txt', '1', 'fly_01', 'w1118', 'Control', 'female', 'vehicle', 'alive'];
       C.downloadText(C.csvStringify(headers, [example]), 'metadata_template.csv', 'text/csv;charset=utf-8');
       toast('Metadata template downloaded.', 'success');
     });
@@ -342,8 +344,11 @@
       if (!f) return;
       const text = await I.readFileAsText(f);
       state.metadata = I.parseMetadata(text);
+      state.metadataFile = { name: f.name, size: f.size };
+      state.metadataStats = null;
+      state.metaMapping = I.suggestMetadataMapping(state.metadata);
       renderMetaMapping();
-      toast('Metadata loaded; choose the joining columns below.');
+      linkMetadata({ notify: true });
     }));
   }
 
@@ -351,8 +356,6 @@
     const files = Array.from(fileList);
     if (!files.length || state.busy) return;
     state.files = files;
-    state.metadata = null;
-    state.metaMapping = null;
     state.dataset = null;
     state.configs = [];
     state.animals = [];
@@ -360,8 +363,10 @@
     state.circadian = [];
     state.phaseRows = [];
     state.metricsRows = [];
+    state.metadataStats = null;
+    updateMetadataStatus();
     $('dataset-card').classList.add('hidden');
-    $('meta-mapping').classList.add('hidden');
+    $('meta-mapping').classList.toggle('hidden', !state.metadata);
     const statuses = files.map((f) => ({ name: f.name, status: 'queued' }));
     showFileList(statuses);
     setStatus('Reading files…', false);
@@ -580,8 +585,9 @@
       c.well = (w.labels && w.labels[c.key]) || c.key;
       return c;
     });
-    if (state.metadata && state.metaMapping) {
-      state.configs = I.applyMetadata(state.configs, state.metadata, state.metaMapping);
+    if (state.metadata) {
+      linkMetadata({ notify: false });
+      renderMetaMapping();
     }
     // default analysis window
     const phases = I.classifyDayPhases(reg);
@@ -621,7 +627,7 @@
       if (meta && meta.flags) flags = meta.flags;
       return { c, i, flags, meanDay, miss };
     });
-    let html = '<table><thead><tr><th>Use</th><th>Animal ID</th><th>Source</th><th>Channel / well</th><th>Group</th><th>Sex</th><th>Treatment</th><th class="num">Act./day</th><th class="num">Missing</th><th>Flags</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Use</th><th>Animal ID</th><th>Source</th><th>Channel / well</th><th>Genotype</th><th>Group</th><th>Sex</th><th>Treatment</th><th class="num">Act./day</th><th class="num">Missing</th><th>Flags</th></tr></thead><tbody>';
     for (const r of rows) {
       const c = r.c;
       html += `<tr>
@@ -629,6 +635,7 @@
         <td><input type="text" data-key="${esc(c.key)}" data-field="id" value="${esc(c.id)}"></td>
         <td class="muted">${esc(c.key)}</td>
         <td>${esc(c.well || '')}</td>
+        <td><input type="text" data-key="${esc(c.key)}" data-field="genotype" value="${esc(c.genotype || '')}"></td>
         <td><input type="text" data-key="${esc(c.key)}" data-field="group" value="${esc(c.group || 'All')}"></td>
         <td><input type="text" data-key="${esc(c.key)}" data-field="sex" value="${esc(c.sex || '')}"></td>
         <td><input type="text" data-key="${esc(c.key)}" data-field="treatment" value="${esc(c.treatment || '')}"></td>
@@ -676,42 +683,102 @@
     ].filter(Boolean).join('');
   }
 
+  function metadataMappingFromUI() {
+    return {
+      file: $('meta-file-col')?.value || null,
+      channel: $('meta-channel-col')?.value || null,
+      id: $('meta-id-col')?.value || null,
+      group: $('meta-group-col')?.value || null,
+      genotype: $('meta-genotype-col')?.value || null,
+      sex: $('meta-sex-col')?.value || null,
+      treatment: $('meta-treat-col')?.value || null
+    };
+  }
+
+  function metadataStatusText() {
+    if (!state.metadata) return '';
+    const nRows = state.metadata.rows.length;
+    if (!state.configs.length) {
+      return `${nRows} metadata rows loaded. They will be linked automatically when a dataset is used.`;
+    }
+    const st = state.metadataStats;
+    if (!st) return `${nRows} metadata rows loaded.`;
+    if (!st.matched) {
+      return `No animals matched. Choose a file, channel/well or animal ID join column, then press “Apply metadata”.`;
+    }
+    const suffix = st.unmatched ? ` ${st.unmatched} animal${st.unmatched === 1 ? '' : 's'} unmatched.` : '';
+    return `Linked ${st.matched} of ${st.total} animals to ${st.matchedRows} metadata rows. Genotype is added automatically.${suffix}`;
+  }
+
+  function updateMetadataStatus() {
+    const el = $('meta-status');
+    if (el) el.textContent = metadataStatusText();
+  }
+
+  function linkMetadata({ notify = true } = {}) {
+    if (!state.metadata) return null;
+    if (!state.metaMapping) state.metaMapping = I.suggestMetadataMapping(state.metadata);
+    if (!state.configs.length) {
+      state.metadataStats = null;
+      updateMetadataStatus();
+      updateManifest();
+      if (notify) toast('Metadata loaded; it will be linked automatically when a dataset is used.', 'info');
+      return null;
+    }
+    state.configs = I.applyMetadata(state.configs, state.metadata, state.metaMapping);
+    state.metadataStats = state.configs.metaStats || null;
+    renderAnimalTable();
+    updateManifest();
+    updateMetadataStatus();
+    if (notify) {
+      const st = state.metadataStats;
+      if (st && st.matched) {
+        toast(`Metadata linked to ${st.matched} of ${st.total} animals. Genotype added automatically.`, 'success');
+      } else {
+        toast('Metadata loaded but no animals matched. Check the file/channel/animal ID columns.', 'error');
+      }
+    }
+    return state.metadataStats;
+  }
+
   function renderMetaMapping() {
     if (!state.metadata) return;
     const meta = state.metadata;
+    const mapping = state.metaMapping || meta.suggested;
     const cols = meta.header;
     const mk = (id, label, suggested) => `<label>${label}<select id="${id}"><option value="">— none —</option>${cols.map((c) => `<option value="${esc(c)}" ${c === suggested ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>`;
     $('meta-mapping').classList.remove('hidden');
     $('meta-mapping').innerHTML = `<div class="mapping-row">
-      ${mk('meta-file-col', 'File / monitor', meta.suggested.file)}
-      ${mk('meta-channel-col', 'Channel / ROI', meta.suggested.channel)}
-      ${mk('meta-id-col', 'Animal ID', meta.suggested.id)}
-      ${mk('meta-group-col', 'Group / genotype', meta.suggested.group)}
-      ${mk('meta-sex-col', 'Sex', meta.suggested.sex)}
-      ${mk('meta-treat-col', 'Treatment', meta.suggested.treatment)}
+      ${mk('meta-file-col', 'File / monitor', mapping.file)}
+      ${mk('meta-channel-col', 'Channel / ROI', mapping.channel)}
+      ${mk('meta-id-col', 'Animal ID', mapping.id)}
+      ${mk('meta-genotype-col', 'Genotype', mapping.genotype)}
+      ${mk('meta-group-col', 'Experimental group', mapping.group)}
+      ${mk('meta-sex-col', 'Sex', mapping.sex)}
+      ${mk('meta-treat-col', 'Treatment', mapping.treatment)}
     </div>
+    <p class="hint" id="meta-status">${esc(metadataStatusText())}</p>
     <div class="row-buttons">
       <button class="btn ghost small" id="btn-apply-meta" type="button">Apply metadata</button>
       <button class="btn ghost small" id="btn-meta-template" type="button">Download template</button>
     </div>`;
     $('btn-meta-template').addEventListener('click', () => {
-      const headers = ['file', 'channel', 'animal_id', 'group', 'sex', 'treatment', 'observations'];
-      const example = ['Monitor1.txt', '1', 'fly_01', 'Control', 'female', 'vehicle', 'alive'];
+      const headers = ['file', 'channel', 'animal_id', 'genotype', 'group', 'sex', 'treatment', 'observations'];
+      const example = ['Monitor1.txt', '1', 'fly_01', 'w1118', 'Control', 'female', 'vehicle', 'alive'];
       C.downloadText(C.csvStringify(headers, [example]), 'metadata_template.csv', 'text/csv;charset=utf-8');
       toast('Metadata template downloaded.', 'success');
     });
     $('btn-apply-meta').addEventListener('click', guard(() => {
-      state.metaMapping = {
-        file: $('meta-file-col').value || null,
-        channel: $('meta-channel-col').value || null,
-        id: $('meta-id-col').value || null,
-        group: $('meta-group-col').value || null,
-        sex: $('meta-sex-col').value || null,
-        treatment: $('meta-treat-col').value || null
-      };
-      state.configs = I.applyMetadata(state.configs, state.metadata, state.metaMapping);
-      renderAnimalTable();
-      toast('Metadata applied.', 'success');
+      state.metaMapping = metadataMappingFromUI();
+      if (!state.metaMapping.file && !state.metaMapping.channel && !state.metaMapping.id) {
+        toast('Choose at least one join column: file, channel/well or animal ID.', 'error');
+        return;
+      }
+      linkMetadata({ notify: true });
+    }));
+    $('meta-mapping').querySelectorAll('select').forEach((sel) => sel.addEventListener('change', () => {
+      state.metaMapping = metadataMappingFromUI();
+      if (state.configs.length) linkMetadata({ notify: false });
     }));
   }
 
@@ -720,9 +787,7 @@
     state.parsed = demo.dataset;
     state.parsedWide = demo.dataset;
     state.configs = demo.configs;
-    state.metadata = null;
-    state.metaMapping = null;
-    $('meta-mapping').classList.add('hidden');
+    $('meta-mapping').classList.toggle('hidden', !state.metadata);
     $('file-list').innerHTML = '<div class="file-item"><strong>Synthetic demo (LD→DD)</strong><span>generated locally</span></div>';
     // regularise and configure
     readSettingsUI();
@@ -736,7 +801,7 @@
     state.dataset = reg;
     state.animals = [];
     state.configs = demo.configs.map((c, i) => ({ ...c, file: 'Synthetic demo', channel: i + 1 }));
-    renderAnimalTable();
+    if (state.metadata) linkMetadata({ notify: false }); else renderAnimalTable();
     $('parser-card').classList.add('hidden');
     $('dataset-card').classList.remove('hidden');
     setStatus('Synthetic demo loaded', true);
@@ -779,7 +844,7 @@
         phases.push(ph);
       } catch (e) {
         console.error('Animal failed:', a.id, e);
-        summaries.push({ animal: a, id: a.id, group: a.group, error: e.message, daily: [], sleepData: { bouts: [] } });
+        summaries.push({ animal: a, id: a.id, group: a.group, genotype: a.genotype, sex: a.sex, treatment: a.treatment, error: e.message, daily: [], sleepData: { bouts: [] } });
         circs.push({ animal: a, error: e.message, tau: NaN, rhythmic: false });
         phases.push({ animal: a, IS: NaN, IV: NaN, RA: NaN, COG: NaN, MAI: NaN, EAI: NaN });
       }
@@ -840,7 +905,8 @@
       const ph = state.phaseRows[i] || {};
       const a = s.animal || {};
       return {
-        id: s.id || a.id, group: s.group || a.group, sex: s.sex || a.sex, treatment: s.treatment || a.treatment,
+        id: s.id || a.id, group: s.group || a.group, genotype: s.genotype || a.genotype || '',
+        sex: s.sex || a.sex, treatment: s.treatment || a.treatment,
         well: s.well || a.well, channel: s.channel, format: s.format,
         alive: s.alive, flags: (s.flags || []).join('; '),
         daysAnalyzed: s.daysAnalyzed, completeDays: s.completeDays,
@@ -967,9 +1033,9 @@
       gRows, { numeric: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] });
 
     const flagged = state.summaries.filter((s) => s.flags && s.flags.length);
-    table('overview-qc-table', ['Animal', 'Group', 'Alive', 'Days', 'Complete', 'Flags'],
-      flagged.map((s) => [esc(s.id), esc(s.group), s.alive ? 'yes' : 'no', s.daysAnalyzed, s.completeDays, esc(s.flags.join('; '))]),
-      { numeric: [3, 4] });
+    table('overview-qc-table', ['Animal', 'Genotype', 'Group', 'Alive', 'Days', 'Complete', 'Flags'],
+      flagged.map((s) => [esc(s.id), esc(s.genotype || ''), esc(s.group), s.alive ? 'yes' : 'no', s.daysAnalyzed, s.completeDays, esc(s.flags.join('; '))]),
+      { numeric: [4, 5] });
 
     const animals = state.animals;
     try {
@@ -1416,7 +1482,7 @@
 
   /* ============================ export ============================ */
   function metricsCsv() {
-    const headers = ['animal_id', 'group', 'sex', 'treatment', 'well', 'channel', 'format', 'alive', 'flags',
+    const headers = ['animal_id', 'group', 'genotype', 'sex', 'treatment', 'well', 'channel', 'format', 'alive', 'flags',
       'days_analyzed', 'complete_days', 'total_activity', 'mean_activity_day', 'day_activity', 'night_activity', 'day_activity_per_day', 'night_activity_per_day', 'light_fraction',
       'total_sleep_min', 'mean_sleep_day', 'day_sleep_min', 'night_sleep_min', 'day_sleep_per_day', 'night_sleep_per_day', 'sleep_percent',
       'mean_bout_count_day', 'mean_bout_len', 'median_bout_len', 'max_bout_len', 'total_bouts',
@@ -1424,7 +1490,7 @@
       'tau', 'rhythmic', 'power', 'width', 'ri', 'rs', 'is', 'iv', 'ra', 'cog', 'm10', 'l5', 'acrophase', 'onset', 'offset', 'mai', 'eai',
       'cosinor_amplitude', 'cosinor_percent_rhythm', 'onset_r2', 'onset_sd', 'onset_phase', 'offset_phase', 'morning_peak', 'evening_peak', 'day_night_ratio'];
     const rows = state.metricsRows.map((r) => [
-      r.id, r.group, r.sex, r.treatment, r.well, r.channel, r.format, r.alive, r.flags,
+      r.id, r.group, r.genotype, r.sex, r.treatment, r.well, r.channel, r.format, r.alive, r.flags,
       r.daysAnalyzed, r.completeDays, r.totalActivity, r.meanActivityPerDay, r.dayActivity, r.nightActivity, r.dayActivityPerDay, r.nightActivityPerDay, r.lightFraction,
       r.totalSleepMin, r.meanSleepPerDay, r.daySleepMin, r.nightSleepMin, r.daySleepPerDay, r.nightSleepPerDay, r.sleepPercent,
       r.meanBoutCountPerDay, r.meanBoutLen, r.medianBoutLen, r.maxBoutLen, r.totalBouts,
@@ -1435,24 +1501,24 @@
     return { filename: 'animals_summary.csv', content: C.csvStringify(headers, rows) };
   }
   function timeSeriesCsv() {
-    const headers = ['animal_id', 'group', 't_hours', 'activity', 'moving', 'asleep', 'light', 'zt', 'ct', 'day'];
+    const headers = ['animal_id', 'group', 'genotype', 't_hours', 'activity', 'moving', 'asleep', 'light', 'zt', 'ct', 'day'];
     const rows = [];
     for (const a of state.animals) rows.push(...SL.timeSeriesTable(a, state.settings, state.phaseMap));
     return { filename: 'time_series.csv', content: C.csvStringify(headers, rows) };
   }
   function boutsCsv() {
-    const headers = ['animal_id', 'group', 'bout_id', 'day', 'start_index', 'end_index', 'start_hours', 'duration_min', 'start_zt', 'end_zt', 'light_phase', 'category', 'truncated'];
+    const headers = ['animal_id', 'group', 'genotype', 'bout_id', 'day', 'start_index', 'end_index', 'start_hours', 'duration_min', 'start_zt', 'end_zt', 'light_phase', 'category', 'truncated'];
     const rows = [];
     for (const s of state.summaries) {
       if (!s.sleepData) continue;
       for (const b of s.sleepData.bouts) {
-        rows.push([s.id, s.group, b.id, b.day, b.start, b.end, b.startTime, b.durationMin, b.startZt, b.endZt, b.lightPhase, b.category, b.truncated ? 'yes' : 'no']);
+        rows.push([s.id, s.group, s.genotype, b.id, b.day, b.start, b.end, b.startTime, b.durationMin, b.startZt, b.endZt, b.lightPhase, b.category, b.truncated ? 'yes' : 'no']);
       }
     }
     return { filename: 'bouts.csv', content: C.csvStringify(headers, rows) };
   }
   function periodogramsCsv() {
-    const headers = ['animal_id', 'group', 'method', 'period_h', 'power', 'threshold', 'power_above_threshold'];
+    const headers = ['animal_id', 'group', 'genotype', 'method', 'period_h', 'power', 'threshold', 'power_above_threshold'];
     const rows = [];
     for (const r of state.circadian) {
       if (!r || r.error) continue;
@@ -1461,7 +1527,7 @@
         s.periods.forEach((p, i) => {
           const power = method === 'chi-square' ? s.qp[i] : s.power[i];
           const thr = method === 'chi-square' ? s.threshold[i] : (s.threshold ?? NaN);
-          rows.push([r.animal.id, r.animal.group, method, p, power, thr, method === 'chi-square' ? s.power[i] : (C.isNum(power) && C.isNum(thr) ? power - thr : NaN)]);
+          rows.push([r.animal.id, r.animal.group, r.animal.genotype, method, p, power, thr, method === 'chi-square' ? s.power[i] : (C.isNum(power) && C.isNum(thr) ? power - thr : NaN)]);
         });
       };
       add('chi-square', r.chiSquare);
@@ -1469,7 +1535,7 @@
       add('fft', r.fft);
       if (r.autocorrelation && r.autocorrelation.lags) {
         r.autocorrelation.lags.forEach((lag, i) => {
-          rows.push([r.animal.id, r.animal.group, 'autocorrelation', lag, r.autocorrelation.smoothed[i], 0.3, r.autocorrelation.smoothed[i] - 0.3]);
+          rows.push([r.animal.id, r.animal.group, r.animal.genotype, 'autocorrelation', lag, r.autocorrelation.smoothed[i], 0.3, r.autocorrelation.smoothed[i] - 0.3]);
         });
       }
     }
@@ -1492,8 +1558,8 @@
     return { filename: 'group_stats.csv', content: C.csvStringify(headers, rows) };
   }
   function phaseCsv() {
-    const headers = ['animal_id', 'group', 'IS', 'IV', 'RA', 'COG', 'M10', 'L5', 'acrophase', 'onset', 'offset', 'onset_phase', 'offset_phase', 'morning_peak', 'evening_peak', 'MAI', 'EAI', 'day_night_ratio', 'cosinor_amplitude', 'cosinor_percent_rhythm'];
-    const rows = state.metricsRows.map((r) => [r.id, r.group, r.IS, r.IV, r.RA, r.COG, r.M10, r.L5, r.acrophase, r.onset, r.offset, r.onsetPhase, r.offsetPhase, r.morningPeak, r.eveningPeak, r.MAI, r.EAI, r.dayNightRatio, r.cosinorAmplitude, r.cosinorPercentRhythm]);
+    const headers = ['animal_id', 'group', 'genotype', 'IS', 'IV', 'RA', 'COG', 'M10', 'L5', 'acrophase', 'onset', 'offset', 'onset_phase', 'offset_phase', 'morning_peak', 'evening_peak', 'MAI', 'EAI', 'day_night_ratio', 'cosinor_amplitude', 'cosinor_percent_rhythm'];
+    const rows = state.metricsRows.map((r) => [r.id, r.group, r.genotype, r.IS, r.IV, r.RA, r.COG, r.M10, r.L5, r.acrophase, r.onset, r.offset, r.onsetPhase, r.offsetPhase, r.morningPeak, r.eveningPeak, r.MAI, r.EAI, r.dayNightRatio, r.cosinorAmplitude, r.cosinorPercentRhythm]);
     return { filename: 'phase_metrics.csv', content: C.csvStringify(headers, rows) };
   }
   function exportCsv(kind) {
@@ -1511,8 +1577,16 @@
       generated: new Date().toISOString(),
       files: state.files.map((f) => ({ name: f.name, size: f.size })),
       dataset: state.parsedWide ? { name: state.parsedWide.name, format: state.parsedWide.format, binMinutes: state.parsedWide.binMinutes } : null,
+      metadata: state.metadata ? {
+        file: state.metadataFile,
+        rows: state.metadata.rows.length,
+        mapping: state.metaMapping,
+        matched: state.metadataStats ? state.metadataStats.matched : null,
+        total: state.metadataStats ? state.metadataStats.total : null
+      } : null,
       animals: state.animals.length,
       groups: C.unique(state.animals.map((a) => a.group)),
+      genotypes: C.unique(state.animals.map((a) => a.genotype).filter(Boolean)),
       settings: state.settings,
       references: [
         'Sokolove & Bushell 1978', 'Lomb 1976', 'Scargle 1982', 'Levine et al. 2002',
@@ -1523,7 +1597,8 @@
   }
   function updateManifest() {
     const m = manifest();
-    $('manifest-pre').textContent = JSON.stringify(m, null, 2);
+    const el = $('manifest-pre');
+    if (el) el.textContent = JSON.stringify(m, null, 2);
   }
   function exportWorkbook() {
     if (!state.metricsRows.length) throw new Error('Build a dataset first.');
