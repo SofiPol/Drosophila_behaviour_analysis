@@ -1,401 +1,593 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Zantiks-to-Rethomics Behavioral Analyzer</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chronobiology Workbench · Circadian &amp; Sleep Analysis</title>
+<meta name="description" content="A browser-based workbench for Drosophila and general behaviour time series: activity, sleep, circadian period, phase, anticipation and group statistics.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css?v=2.0.3">
 </head>
 <body>
-  <!-- ================= Header ================= -->
-  <header class="app-header">
-    <div class="header-inner">
-      <div class="brand">
-        <div class="brand-icon">🪰</div>
-        <div>
-          <h1>Zantiks-to-Rethomics Behavioral Analyzer</h1>
-          <p class="brand-sub">Drosophila circadian &amp; sleep analysis · DAM conversion → Rethomics-style pipeline</p>
-        </div>
-      </div>
-      <div class="workflow">
-        <span class="wf-step" id="wf-1"><i>1</i> Upload</span>
-        <span class="wf-arrow">→</span>
-        <span class="wf-step" id="wf-2"><i>2</i> Convert</span>
-        <span class="wf-arrow">→</span>
-        <span class="wf-step" id="wf-3"><i>3</i> Verify</span>
-        <span class="wf-arrow">→</span>
-        <span class="wf-step" id="wf-4"><i>4</i> Analyze</span>
-        <span class="wf-arrow">→</span>
-        <span class="wf-step" id="wf-5"><i>5</i> Export</span>
-      </div>
+<div class="app-shell">
+
+  <!-- ================= fixed top bar ================= -->
+  <header class="topbar">
+    <a class="brand" href="#import" data-goto="import">
+      <span class="monogram">C</span>
+      <span class="brand-text">
+        <strong>Chronobiology Workbench</strong>
+        <small>circadian · sleep · behaviour</small>
+      </span>
+    </a>
+    <div class="section-marker">
+      <span class="marker-number" id="section-number">01</span>
+      <span class="marker-name" id="section-name">Import</span>
+    </div>
+    <div class="topbar-right">
+      <span class="status-dot" id="status-dot"></span>
+      <span class="dataset-status" id="dataset-status">No dataset loaded</span>
+      <button class="btn tiny ghost" id="btn-help" type="button">Methods</button>
     </div>
   </header>
 
-  <!-- ================= Tabs ================= -->
-  <nav class="tabbar" id="tabbar">
-    <button class="tab-btn active" data-tab="tab-convert">1 · Data Conversion</button>
-    <button class="tab-btn" data-tab="tab-metadata">2 · Metadata Manager</button>
-    <button class="tab-btn" data-tab="tab-actogram">3 · Actograms</button>
-    <button class="tab-btn" data-tab="tab-profiles">4 · Sleep &amp; Activity Profiles</button>
-    <button class="tab-btn" data-tab="tab-boxplots">5 · Box Plots &amp; Statistics</button>
-    <button class="tab-btn" data-tab="tab-circadian">6 · Circadian Analysis</button>
-    <button class="tab-btn" data-tab="tab-export">7 · Data &amp; Figure Export</button>
+  <!-- ================= step navigation ================= -->
+  <nav class="stepper" id="stepper" aria-label="Analysis sections">
+    <button class="step active" data-section="import" type="button"><span>01</span>Import</button>
+    <button class="step" data-section="settings" type="button"><span>02</span>Settings</button>
+    <button class="step" data-section="overview" type="button"><span>03</span>Overview</button>
+    <button class="step" data-section="actograms" type="button"><span>04</span>Actograms</button>
+    <button class="step" data-section="profiles" type="button"><span>05</span>Profiles</button>
+    <button class="step" data-section="sleep" type="button"><span>06</span>Sleep</button>
+    <button class="step" data-section="circadian" type="button"><span>07</span>Circadian</button>
+    <button class="step" data-section="phase" type="button"><span>08</span>Phase</button>
+    <button class="step" data-section="stats" type="button"><span>09</span>Statistics</button>
+    <button class="step" data-section="export" type="button"><span>10</span>Export</button>
   </nav>
 
-  <main class="container">
+  <main class="page">
 
-    <!-- ================= Tab 1: Data Conversion ================= -->
-    <section class="tab-panel active" id="tab-convert">
-      <div class="panel-head">
-        <h2>Data Conversion &amp; Ingestion</h2>
-        <p>Upload a raw Zantiks CSV output and convert it into standard DAM (Drosophila Activity Monitor) tab-separated format.</p>
+    <!-- ============================================================ -->
+    <!-- 01 IMPORT                                                    -->
+    <!-- ============================================================ -->
+    <section class="panel active" id="sec-import">
+      <div class="hero">
+        <p class="eyebrow">Behavioural time-series analysis</p>
+        <h1 class="display">Read the rhythm<br><em>and the rest.</em></h1>
+        <p class="lede">Import DAM monitors, Zantiks plates, ethoscope recordings or any generic activity table. Score sleep, estimate circadian period with six independent methods, quantify phase and anticipation, and compare groups — all locally in your browser.</p>
+        <div class="hero-actions">
+          <button class="btn primary" id="btn-demo" type="button">Load synthetic demo</button>
+          <button class="btn ghost" id="btn-choose-files" type="button">Upload data</button>
+        </div>
+        <p class="privacy-note">Nothing is uploaded to a server. The page runs entirely client-side.</p>
       </div>
 
-      <div class="card">
-        <h3>Option A: Zantiks CSV Conversion</h3>
-        <div class="dropzone" id="zantiks-drop">
-          <input type="file" id="zantiks-file" accept=".csv,.txt" hidden>
-          <div class="dz-icon">📄</div>
-          <p><strong>Drop a Zantiks CSV here</strong> or <span class="link">browse files</span></p>
-          <p class="dz-hint">e.g. <code>circadian_rhythms_glasgow-20250801T141426.csv</code></p>
-        </div>
+      <div class="grid-2">
+        <article class="card">
+          <header class="card-head">
+            <span class="card-index">01</span>
+            <div><h2>Data files</h2><p>Drop one or more files. Formats are detected automatically.</p></div>
+          </header>
+          <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload behavioural data files">
+            <input type="file" id="file-input" multiple hidden accept=".txt,.dat,.csv,.tsv,.xlsx,.xls,.db,.sqlite,.sqlite3">
+            <div class="dz-mark">↥</div>
+            <p><strong>Drop files here</strong> or <span class="link">browse</span></p>
+            <p class="hint">DAM <code>.txt</code> · Zantiks <code>.csv</code> · generic <code>.csv</code>/<code>.xlsx</code> · ethoscope <code>.db</code>/<code>.csv</code></p>
+          </div>
+          <div class="file-list" id="file-list"></div>
+        </article>
+
+        <article class="card">
+          <header class="card-head">
+            <span class="card-index">02</span>
+            <div><h2>How it works</h2><p>Four steps, no build tools.</p></div>
+          </header>
+          <ol class="how-list">
+            <li><span>01</span><div><strong>Import</strong><p>DAM, Zantiks, ethoscope or generic CSV/Excel. Dates and light status are read from the file.</p></div></li>
+            <li><span>02</span><div><strong>Check</strong><p>Review animals, group assignment, dead/missing flags and the analysis window.</p></div></li>
+            <li><span>03</span><div><strong>Analyse</strong><p>Activity, sleep, bouts, P(wake)/P(doze), periodograms, phase, anticipation, statistics.</p></div></li>
+            <li><span>04</span><div><strong>Export</strong><p>Summary tables, figures, an HTML/PDF report and a reproducibility manifest.</p></div></li>
+          </ol>
+          <p class="small muted">The engine is documented in <code>METHODS.md</code> and follows the formulas in the technical specification.</p>
+        </article>
+      </div>
+
+      <article class="card hidden" id="parser-card">
+        <header class="card-head">
+          <span class="card-index">03</span>
+          <div><h2 id="parser-title">Parsed file</h2><p id="parser-subtitle"></p></div>
+          <button class="btn tiny ghost" id="btn-clear-import" type="button">Clear</button>
+        </header>
+        <div class="info-grid" id="parser-info"></div>
+        <div id="mapping-controls"></div>
+        <div class="table-wrap" id="parser-preview"></div>
         <div class="row-buttons">
-          <button class="btn ghost" id="btn-sample-zantiks">🎲 Load sample Zantiks data</button>
+          <button class="btn primary" id="btn-use-parsed" type="button">Use this dataset</button>
+          <button class="btn ghost hidden" id="btn-download-dam" type="button">Download standard DAM file</button>
         </div>
-      </div>
+      </article>
 
-      <div class="card" style="margin-top: 1rem;">
-        <h3>Option B: Direct Multi-Monitor DAM Upload (Up to 10 Monitors)</h3>
-        <p class="muted" style="font-size: 0.85rem; margin-bottom: 10px;">Working directly with the DAM system? Select or drop multiple monitor files (e.g. <code>Monitor1.txt</code>, <code>Monitor2.txt</code>, ..., <code>Monitor10.txt</code>) to analyze up to 10 monitors simultaneously.</p>
-        <div class="dropzone" id="dam-drop">
-          <input type="file" id="dam-file" accept=".txt,.dat,.csv" multiple hidden>
-          <div class="dz-icon">📊</div>
-          <p><strong>Drop 1 to 10 DAM monitor files here (e.g. Monitor1.txt .. Monitor10.txt)</strong> or <span class="link">browse files</span></p>
-          <p class="dz-hint">Standard 42-column tab-separated DAM monitor text format (batch selection supported)</p>
-        </div>
+      <article class="card hidden" id="dataset-card">
+        <header class="card-head">
+          <span class="card-index">04</span>
+          <div><h2>Animals &amp; groups</h2><p>Edit group names directly. Upload metadata to join by file, channel or animal ID.</p></div>
+          <span class="badge" id="animal-badge">0 animals</span>
+        </header>
+        <div class="qc-strip" id="qc-summary"></div>
         <div class="row-buttons">
-          <button class="btn ghost" id="btn-sample-dam">📊 Load 3 Sample DAM Monitors (Monitor1.txt .. Monitor3.txt)</button>
+          <button class="btn ghost small" id="btn-include-all" type="button">Include all</button>
+          <button class="btn ghost small" id="btn-exclude-all" type="button">Exclude all</button>
+          <button class="btn ghost small" id="btn-exclude-empty" type="button">Exclude zero-activity</button>
+          <label class="btn ghost small file-button">Attach metadata CSV<input type="file" id="meta-file" accept=".csv,.txt" hidden></label>
+          <button class="btn ghost small" id="btn-meta-template-global" type="button">Metadata template</button>
+          <button class="btn primary small" id="btn-build-dataset" type="button">Build &amp; analyse dataset</button>
         </div>
-      </div>
-
-      <div class="card hidden" id="zantiks-info-card">
-        <h3>Parsed file info</h3>
-        <div class="info-grid" id="zantiks-info"></div>
-        <h3 style="margin-top:16px">Channel overview (A1–D6)</h3>
-        <div class="table-wrap">
-          <table class="data-table" id="channel-table"></table>
-        </div>
-        <div class="row-buttons">
-          <button class="btn primary" id="btn-convert">⚙️ Convert to DAM Format</button>
-        </div>
-      </div>
-
-      <div class="card hidden" id="dam-result-card">
-        <h3>DAM file preview <span class="badge" id="dam-badge"></span></h3>
-        <p class="muted" id="dam-summary"></p>
-        <div class="table-wrap">
-          <table class="data-table" id="dam-preview-table"></table>
-        </div>
-        <div class="row-buttons">
-          <button class="btn primary" id="btn-download-dam">⬇️ Download DAM_file.txt</button>
-          <button class="btn ghost" id="btn-goto-metadata">Next: Metadata Manager →</button>
-        </div>
-      </div>
+        <div class="hidden" id="meta-mapping"></div>
+        <div class="table-wrap tall" id="animal-table"></div>
+      </article>
     </section>
 
-    <!-- ================= Tab 2: Metadata Manager ================= -->
-    <section class="tab-panel" id="tab-metadata">
-      <div class="panel-head">
-        <h2>Metadata Management</h2>
-        <p>Upload experimental metadata, cross-validate against the DAM file, edit rows, and link everything into an analyzable dataset.</p>
+    <!-- ============================================================ -->
+    <!-- 02 SETTINGS                                                  -->
+    <!-- ============================================================ -->
+    <section class="panel" id="sec-settings">
+      <div class="section-head">
+        <div><p class="eyebrow">02 · Parameters</p><h2 class="display">Set the rules once.</h2></div>
+        <p class="section-note">Defaults follow the technical specification. Every parameter used in an export is written into the reproducibility manifest.</p>
       </div>
 
-      <div class="card">
-        <div class="dropzone" id="metadata-drop">
-          <input type="file" id="metadata-file" accept=".csv,.txt" hidden>
-          <div class="dz-icon">🏷️</div>
-          <p><strong>Drop a metadata CSV here</strong> or <span class="link">browse files</span></p>
-          <p class="dz-hint">Requires: <code>file, start_datetime, stop_datetime, region_id, well, genotype, sex, replicate, exp, observations</code></p>
-        </div>
-        <div class="row-buttons">
-          <button class="btn ghost" id="btn-sample-metadata">🎲 Load sample metadata</button>
-        </div>
+      <div class="settings-grid">
+        <article class="card">
+          <h3>Time &amp; window</h3>
+          <div class="field-grid">
+            <label>Analysis bin
+              <select id="set-bin">
+                <option value="1">1 min</option><option value="5">5 min</option><option value="10">10 min</option>
+                <option value="15">15 min</option><option value="30">30 min</option><option value="60">60 min</option>
+              </select>
+            </label>
+            <label>Cycle length T (h)<input type="number" id="set-cycle" value="24" min="16" max="32" step="0.5"></label>
+            <label>Lights-on clock (ZT0)<input type="time" id="set-lights-on" value="08:00"></label>
+            <label>Phase
+              <select id="set-phase"><option value="ALL">All days</option><option value="LD">LD only</option><option value="DD">DD only</option><option value="LL">LL only</option></select>
+            </label>
+            <label>First analysis day<input type="number" id="set-start-day" value="1" min="0" step="1"></label>
+            <label>Last analysis day<input type="number" id="set-end-day" value="999" min="1" step="1"></label>
+          </div>
+          <p class="hint">Partial days are excluded from daily statistics. Lights-on is inferred from the light column; set it manually for DD-only recordings.</p>
+        </article>
+
+        <article class="card">
+          <h3>Sleep &amp; quality control</h3>
+          <div class="field-grid">
+            <label>Immobility threshold (counts)<input type="number" id="set-threshold" value="0" min="0" step="1"></label>
+            <label>Minimum sleep bout (min)<input type="number" id="set-min-sleep" value="5" min="1" max="30" step="1"></label>
+            <label>Short bout max (min)<input type="number" id="set-short-max" value="30" min="5" step="1"></label>
+            <label>Intermediate bout max (min)<input type="number" id="set-inter-max" value="60" min="10" step="1"></label>
+            <label>Brief awakening (min)<input type="number" id="set-brief" value="2" min="1" step="1"></label>
+            <label>Complete-day fraction<input type="number" id="set-complete" value="0.9" min="0.5" max="1" step="0.05"></label>
+            <label>Dead after no activity (h)<input type="number" id="set-dead-hours" value="24" min="1" step="1"></label>
+            <label>Max missing fraction<input type="number" id="set-max-missing" value="0.1" min="0" max="1" step="0.01"></label>
+            <label>Low-activity flag (counts/day)<input type="number" id="set-low-activity" value="1" min="0" step="1"></label>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3>Circadian</h3>
+          <div class="field-grid">
+            <label>Primary method
+              <select id="set-primary">
+                <option value="chi-square">Chi-square (Sokolove–Bushell)</option>
+                <option value="lomb-scargle">Lomb–Scargle</option>
+                <option value="autocorrelation">Autocorrelation</option>
+                <option value="fft">FFT</option>
+                <option value="cosinor">Cosinor</option>
+                <option value="onset">Onset regression</option>
+              </select>
+            </label>
+            <label>Periodogram bin (min)<select id="set-per-bin"><option value="1">1</option><option value="5">5</option><option value="10">10</option><option value="15">15</option><option value="30" selected>30</option><option value="60">60</option></select></label>
+            <label>Min period (h)<input type="number" id="set-per-min" value="16" min="8" max="40" step="0.5"></label>
+            <label>Max period (h)<input type="number" id="set-per-max" value="32" min="12" max="48" step="0.5"></label>
+            <label>Step (h)<input type="number" id="set-per-step" value="0.1" min="0.01" max="1" step="0.05"></label>
+            <label>Alpha<select id="set-alpha"><option value="0.05">0.05</option><option value="0.01">0.01</option></select></label>
+            <label>Rhythmic power ≥<input type="number" id="set-power-min" value="10" step="1"></label>
+            <label>Peak width ≥ (h)<input type="number" id="set-width-min" value="2" step="0.5"></label>
+            <label>Autocorrelation RI ≥<input type="number" id="set-ri" value="0.3" step="0.05"></label>
+            <label>Consensus tolerance (h)<input type="number" id="set-consensus" value="0.5" step="0.1"></label>
+            <label>Max interpolated gap (min)<input type="number" id="set-max-gap" value="60" step="10"></label>
+            <label>Autocorrelation max lag (h)<input type="number" id="set-auto-lag" value="120" step="24"></label>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3>Anticipation, rebound &amp; display</h3>
+          <div class="field-grid">
+            <label>Onset threshold (% max)<input type="number" id="set-onset-frac" value="20" min="1" max="100" step="1"></label>
+            <label>Onset sustained (min)<input type="number" id="set-onset-duration" value="30" min="1" step="5"></label>
+            <label>Rebound baseline days<input type="text" id="set-rebound-baseline" placeholder="e.g. 1,2,3"></label>
+            <label>Deprivation days<input type="text" id="set-rebound-dep" placeholder="e.g. 4"></label>
+            <label>Recovery days<input type="text" id="set-rebound-rec" placeholder="e.g. 5,6"></label>
+            <label>Error bars<select id="set-error"><option value="sem">SEM</option><option value="sd">SD</option><option value="ci">95% CI</option></select></label>
+            <label>Profile normalisation
+              <select id="set-normalise"><option value="none">None</option><option value="dailyMean">Daily mean</option><option value="max">Maximum</option><option value="zscore">z-score</option><option value="fraction">Fraction of daily total</option></select>
+            </label>
+            <label>Time base<select id="set-timebase"><option value="ZT">ZT</option><option value="CT">CT</option><option value="clock">Clock</option></select></label>
+            <label>Actogram bin<select id="set-act-bin"><option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option><option value="30" selected>30 min</option><option value="60">60 min</option></select></label>
+            <label>Actogram scaling<select id="set-act-scale"><option value="percentile">99th percentile</option><option value="common">Common maximum</option><option value="perAnimal">Per animal</option></select></label>
+            <label class="check-label"><input type="checkbox" id="set-double" checked> Double-plot actograms</label>
+          </div>
+        </article>
       </div>
 
-      <div class="card hidden" id="metadata-result-card">
-        <h3>Validation report <span class="badge" id="meta-badge"></span></h3>
-        <div id="meta-issues"></div>
-        <h3 style="margin-top:16px">Metadata table (click cells to edit)</h3>
-        <div class="table-wrap">
-          <table class="data-table editable" id="metadata-table"></table>
-        </div>
-        <div class="row-buttons">
-          <button class="btn primary" id="btn-link-data">🔗 Link data &amp; Run Analysis</button>
-        </div>
+      <div class="row-buttons">
+        <button class="btn primary" id="btn-apply-settings" type="button">Apply settings &amp; recompute</button>
+        <button class="btn ghost" id="btn-save-settings" type="button">Save to browser</button>
+        <button class="btn ghost" id="btn-reset-settings" type="button">Reset defaults</button>
       </div>
-
-      <div class="card hidden" id="linked-card">
-        <h3>Linked dataset summary</h3>
-        <div class="info-grid" id="linked-info"></div>
-        <div class="row-buttons">
-          <button class="btn primary" id="btn-goto-actogram">Next: Actograms →</button>
-        </div>
-      </div>
+      <article class="card inset">
+        <h3>Current analysis definition</h3>
+        <div class="settings-summary" id="settings-summary"></div>
+      </article>
     </section>
 
-    <!-- ================= Tab 3: Actograms ================= -->
-    <section class="tab-panel" id="tab-actogram">
-      <div class="panel-head">
-        <h2>Actogram Studio</h2>
-        <p>Individual fly and average group actograms (tile heatmaps) across the whole experiment.</p>
+    <!-- ============================================================ -->
+    <!-- 03 OVERVIEW                                                  -->
+    <!-- ============================================================ -->
+    <section class="panel" id="sec-overview">
+      <div class="section-head">
+        <div><p class="eyebrow">03 · Overview</p><h2 class="display">The dataset at a glance.</h2></div>
+        <button class="btn primary" id="btn-run-all" type="button">Run all analyses</button>
       </div>
-      <div class="card">
+      <div class="kpi-grid" id="overview-kpis"></div>
+      <article class="card">
+        <header class="card-head"><span class="card-index">A</span><div><h3>Group summary</h3><p>Mean ± SEM across animals; rhythmic animals only for period.</p></div></header>
+        <div class="table-wrap" id="overview-group-table"></div>
+      </article>
+      <div class="grid-2">
+        <article class="card"><header class="card-head"><span class="card-index">B</span><div><h3>Recording timeline</h3></div></header><div class="chart" id="overview-timeline"></div></article>
+        <article class="card"><header class="card-head"><span class="card-index">C</span><div><h3>Activity profile</h3></div></header><div class="chart" id="overview-profile"></div></article>
+      </div>
+      <article class="card">
+        <header class="card-head"><span class="card-index">D</span><div><h3>Quality control</h3><p>Flags are advisory; toggle animals in Import to exclude them.</p></div></header>
+        <div class="table-wrap" id="overview-qc-table"></div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 04 ACTOGRAMS                                                 -->
+    <!-- ============================================================ -->
+    <section class="panel" id="sec-actograms">
+      <div class="section-head">
+        <div><p class="eyebrow">04 · Actograms</p><h2 class="display">Days, stacked.</h2></div>
+        <p class="section-note">Double-plotted bar actograms with dark-phase shading, onset markers and an optional period line.</p>
+      </div>
+      <article class="card">
         <div class="controls">
-          <label>Mode
-            <select id="act-mode">
-              <option value="individual">Individual actograms</option>
-              <option value="group">Average group actograms</option>
-            </select>
-          </label>
-          <label>Binning
-            <select id="act-bin">
-              <option value="1">1 min</option>
-              <option value="5">5 min</option>
-              <option value="15">15 min</option>
-              <option value="30" selected>30 min</option>
-              <option value="60">60 min</option>
-            </select>
-          </label>
-          <label>Colour map
-            <select id="act-colormap">
-              <option value="viridis" selected>Viridis</option>
-              <option value="magma">Magma</option>
-              <option value="plasma">Plasma</option>
-              <option value="standard">Standard</option>
-            </select>
-          </label>
-          <button class="btn primary" id="btn-render-actogram">🖼️ Render Actograms</button>
+          <label>View<select id="act-mode"><option value="individual">Individual</option><option value="average">Group average</option></select></label>
+          <label>Group<select id="act-group-filter"><option value="__all">All groups</option></select></label>
+          <label>Animal<select id="act-animal-select"></select></label>
+          <label>Bin<select id="act-bin"><option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option><option value="30" selected>30 min</option><option value="60">60 min</option></select></label>
+          <label>Scaling<select id="act-scale"><option value="percentile">99th percentile</option><option value="common">Common max</option><option value="perAnimal">Per animal</option></select></label>
+          <label class="check-label"><input type="checkbox" id="act-double" checked> Double plot</label>
+          <label class="check-label"><input type="checkbox" id="act-overlay" checked> Overlays</label>
+          <label>Period line τ (h)<input type="number" id="act-period-tau" placeholder="auto" step="0.1" min="16" max="32"></label>
+          <label class="check-label"><input type="checkbox" id="act-sleep"> Sleep actogram</label>
+          <button class="btn primary" id="btn-render-actograms" type="button">Render actograms</button>
         </div>
-      </div>
-      <div class="chart-area" id="actogram-container">
-        <div class="empty-state">Load &amp; link a dataset to render actograms.</div>
-      </div>
-    </section>
-
-    <!-- ================= Tab 4: Profiles ================= -->
-    <section class="tab-panel" id="tab-profiles">
-      <div class="panel-head">
-        <h2>Sleep &amp; Activity Profiles</h2>
-        <p>Whole-experiment trajectories plus 24-hour wrapped sleep and activity profiles with LD annotations.</p>
-      </div>
-      <div class="card">
-        <div class="controls">
-          <label>Phase
-            <select id="prof-phase">
-              <option value="LD" selected>Entrainment (LD)</option>
-              <option value="DD">Free-running (DD)</option>
-              <option value="ALL">All days</option>
-            </select>
-          </label>
-          <label>Resolution
-            <select id="prof-res">
-              <option value="1">1 min</option>
-              <option value="5" selected>5 min</option>
-              <option value="15">15 min</option>
-              <option value="30">30 min</option>
-            </select>
-          </label>
-          <label>Y-max (optional)
-            <input type="number" id="prof-ymax" placeholder="auto" min="0" step="1000">
-          </label>
-          <button class="btn primary" id="btn-render-profiles">🖼️ Render Profiles</button>
-        </div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">Whole Experiment Activity Profile
-          <button class="btn small ghost export-btn" data-export="whole-exp">Export</button>
-        </div>
-        <div class="chart-area" id="chart-whole-exp"><div class="empty-state">No data yet.</div></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">24-Hour Sleep Profile
-          <button class="btn small ghost export-btn" data-export="sleep-profile">Export</button>
-        </div>
-        <div class="chart-area" id="chart-sleep-profile"><div class="empty-state">No data yet.</div></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">24-Hour Activity Profile
-          <button class="btn small ghost export-btn" data-export="activity-profile">Export</button>
-        </div>
-        <div class="chart-area" id="chart-activity-profile"><div class="empty-state">No data yet.</div></div>
-      </div>
-    </section>
-
-    <!-- ================= Tab 5: Box plots & stats ================= -->
-    <section class="tab-panel" id="tab-boxplots">
-      <div class="panel-head">
-        <h2>Box Plots &amp; Statistical Testing</h2>
-        <p>Per-genotype daily metrics with non-parametric statistical comparisons (Wilcoxon / Kruskal-Wallis + Dunn).</p>
-      </div>
-      <div class="card">
-        <div class="controls">
-          <label>Metric
-            <select id="box-metric">
-              <option value="sleepMinDay" selected>Total Daily Sleep (min/day)</option>
-              <option value="activityDay">Total Daily Activity (counts/day)</option>
-              <option value="boutCountDay">Sleep Bout Count (per day)</option>
-              <option value="meanBoutLenDay">Mean Bout Duration (min)</option>
-            </select>
-          </label>
-          <label>Y-axis cap (optional)
-            <input type="number" id="box-cap" placeholder="auto" min="0" step="1">
-          </label>
-          <button class="btn primary" id="btn-render-box">📊 Compute Statistics &amp; Plot</button>
-        </div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title" id="box-title">Box Plot
-          <button class="btn small ghost export-btn" data-export="box">Export</button>
-        </div>
-        <div class="chart-area" id="chart-box"><div class="empty-state">No data yet.</div></div>
-      </div>
-      <div class="card">
-        <h3>Normality test (Shapiro-Wilk, per group)</h3>
-        <div class="table-wrap"><table class="data-table" id="shapiro-table"></table></div>
-        <h3 style="margin-top:16px">Group comparison</h3>
-        <div class="table-wrap"><table class="data-table" id="comparison-table"></table></div>
-        <div id="dunn-section" class="hidden">
-          <h3 style="margin-top:16px">Post-hoc Dunn's test (Bonferroni-adjusted)</h3>
-          <div class="table-wrap"><table class="data-table" id="dunn-table"></table></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= Tab 6: Circadian ================= -->
-    <section class="tab-panel" id="tab-circadian">
-      <div class="panel-head">
-        <h2>Circadian Periodogram Studio</h2>
-        <p>Chi-square periodograms (Sokolove &amp; Bushell) for rhythmicity detection and period estimation.</p>
-      </div>
-      <div class="card">
-        <div class="controls">
-          <label>Phase
-            <select id="per-phase">
-              <option value="ALL" selected>All days</option>
-              <option value="LD">Entrainment (LD)</option>
-              <option value="DD">Free-running (DD)</option>
-            </select>
-          </label>
-          <label>Min period
-            <input type="number" id="per-min" value="18" min="8" max="40" step="0.5">
-          </label>
-          <label>Max period
-            <input type="number" id="per-max" value="32" min="8" max="48" step="0.5">
-          </label>
-          <label>Step
-            <select id="per-step">
-              <option value="1">1 h</option>
-              <option value="0.5" selected>0.5 h</option>
-              <option value="0.25">0.25 h</option>
-            </select>
-          </label>
-          <label>Alpha
-            <select id="per-alpha">
-              <option value="0.05">0.05</option>
-              <option value="0.01" selected>0.01</option>
-            </select>
-          </label>
-          <button class="btn primary" id="btn-render-period">📈 Run Periodogram Analysis</button>
-        </div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">Chi-Square Periodograms
-          <button class="btn small ghost export-btn" data-export="periodogram">Export</button>
-        </div>
-        <div class="chart-area" id="chart-periodogram"><div class="empty-state">No data yet.</div></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">Peak Period Distribution
-          <button class="btn small ghost export-btn" data-export="period-dist">Export</button>
-        </div>
-        <div class="chart-area" id="chart-period-dist"><div class="empty-state">No data yet.</div></div>
-      </div>
-      <div class="card">
-        <h3>Rhythmicity classification</h3>
-        <div class="table-wrap"><table class="data-table" id="rhythmicity-table"></table></div>
-      </div>
-    </section>
-
-    <!-- ================= Tab 7: Export ================= -->
-    <section class="tab-panel" id="tab-export">
-      <div class="panel-head">
-        <h2>Data &amp; Figure Export</h2>
-        <p>Download publication figures (PNG / SVG, 300 DPI), cleaned summary tables, and a reproducible HTML report.</p>
-      </div>
-      <div class="card" style="margin-bottom: 1.2rem;">
-        <h3>📦 Bulk Export Package</h3>
-        <p class="muted">Download all generated publication figures and summary CSV data files in one click.</p>
-        <div class="row-buttons" style="margin-top:10px;">
-          <button class="btn primary" id="btn-export-all-bulk" style="font-size: 0.95rem; padding: 0.75rem 1.4rem;">📦 Download Complete Export Package</button>
-        </div>
-      </div>
-      <div class="card">
-        <h3>📊 Publication Figures (300 DPI)</h3>
-        <div class="export-grid" id="figure-exports">
-          <button class="btn ghost" data-fig="act-ind">Individual actograms</button>
-          <button class="btn ghost" data-fig="act-group">Group actograms</button>
-          <button class="btn ghost" data-fig="whole-exp">Whole-exp activity</button>
-          <button class="btn ghost" data-fig="sleep-profile">Sleep profile</button>
-          <button class="btn ghost" data-fig="activity-profile">Activity profile</button>
-          <button class="btn ghost" data-fig="box">Box plot</button>
-          <button class="btn ghost" data-fig="periodogram">Periodogram</button>
-          <button class="btn ghost" data-fig="period-dist">Period distribution</button>
-        </div>
-        <div class="controls" style="margin-top:12px">
-          <label>Format
-            <select id="export-format">
-              <option value="png">PNG</option>
-              <option value="svg">SVG</option>
-            </select>
-          </label>
-        </div>
-      </div>
-      <div class="card">
-        <h3>📁 Cleaned summary tables</h3>
         <div class="row-buttons">
-          <button class="btn ghost" id="btn-export-sleep-csv">⬇️ sleep_summary.csv</button>
-          <button class="btn ghost" id="btn-export-period-csv">⬇️ period_summary.csv</button>
-          <button class="btn ghost" id="btn-export-dam">⬇️ DAM_file.txt</button>
-          <button class="btn ghost" id="btn-export-report">📄 Generate HTML report</button>
+          <button class="btn ghost small" id="act-prev" type="button">← Previous</button>
+          <span class="page-label" id="act-page-label">1 / 1</span>
+          <button class="btn ghost small" id="act-next" type="button">Next →</button>
+          <button class="btn ghost small" id="btn-export-actogram" type="button">Export figure</button>
         </div>
+      </article>
+      <div class="actogram-grid" id="actogram-grid"></div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 05 PROFILES                                                  -->
+    <!-- ============================================================ -->
+    <section class="panel" id="sec-profiles">
+      <div class="section-head">
+        <div><p class="eyebrow">05 · Profiles</p><h2 class="display">A day, averaged.</h2></div>
+        <p class="section-note">Activity, sleep, P(wake)/P(doze) and bout architecture by ZT or CT, with shaded dark phase.</p>
       </div>
-      <div class="card">
-        <h3>Analysis session overview</h3>
-        <div class="info-grid" id="session-info"></div>
+      <article class="card">
+        <div class="controls">
+          <label>Variable
+            <select id="prof-variable">
+              <option value="activity">Activity</option>
+              <option value="sleepMin">Sleep (min/bin)</option>
+              <option value="sleepFrac">Fraction asleep</option>
+              <option value="pWake">P(wake)</option>
+              <option value="pDoze">P(doze)</option>
+              <option value="boutCount">Bouts initiated</option>
+              <option value="boutLen">Bout length</option>
+              <option value="activityAwake">Activity per awake minute</option>
+            </select>
+          </label>
+          <label>Group<select id="prof-group"><option value="__all">All groups</option></select></label>
+          <label>Resolution<select id="prof-res"><option value="5">5 min</option><option value="15">15 min</option><option value="30" selected>30 min</option><option value="60">60 min</option></select></label>
+          <label>Time base<select id="prof-timebase"><option value="ZT">ZT</option><option value="CT">CT</option></select></label>
+          <label>Normalisation<select id="prof-normalise"><option value="none">None</option><option value="dailyMean">Daily mean</option><option value="max">Maximum</option><option value="zscore">z-score</option><option value="fraction">Fraction</option></select></label>
+          <label>Style<select id="prof-style"><option value="bars">Bars</option><option value="lines">Lines + SEM</option></select></label>
+          <label>Error<select id="prof-error"><option value="sem">SEM</option><option value="sd">SD</option><option value="ci">95% CI</option></select></label>
+          <label class="check-label"><input type="checkbox" id="prof-double"> Double plot</label>
+          <label class="check-label"><input type="checkbox" id="prof-polar"> Circular view</label>
+          <button class="btn primary" id="btn-render-profiles" type="button">Render profiles</button>
+        </div>
+      </article>
+      <article class="card"><header class="card-head"><span class="card-index">A</span><div><h3 id="profile-title">24-hour profile</h3></div><button class="btn tiny ghost" data-export="profile-main" type="button">Export</button></header><div class="chart tall" id="profile-main"></div></article>
+      <div class="grid-2">
+        <article class="card"><header class="card-head"><span class="card-index">B</span><div><h3>Sleep architecture</h3><p>Sleep profile with bouts initiated per hour.</p></div></header><div class="chart" id="profile-architecture"></div></article>
+        <article class="card"><header class="card-head"><span class="card-index">C</span><div><h3>P(wake) and P(doze)</h3></div></header><div class="chart" id="profile-transition"></div></article>
       </div>
+      <div class="grid-2">
+        <article class="card"><header class="card-head"><span class="card-index">D</span><div><h3>Circular profile</h3></div></header><div class="chart" id="profile-circular"></div></article>
+        <article class="card"><header class="card-head"><span class="card-index">E</span><div><h3>Sleep/wake raster</h3><p>Animals on rows; filled = sleep.</p></div></header><div class="chart tall" id="profile-raster"></div></article>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 06 SLEEP                                                     -->
+    <!-- ============================================================ -->
+    <section class="panel" id="sec-sleep">
+      <div class="section-head">
+        <div><p class="eyebrow">06 · Sleep</p><h2 class="display">Bouts, depth, architecture.</h2></div>
+        <button class="btn primary" id="btn-render-sleep" type="button">Compute sleep</button>
+      </div>
+      <div class="kpi-grid" id="sleep-kpis"></div>
+      <div class="grid-2">
+        <article class="card"><header class="card-head"><span class="card-index">A</span><div><h3>Sleep profile</h3></div></header><div class="chart" id="sleep-profile-chart"></div></article>
+        <article class="card"><header class="card-head"><span class="card-index">B</span><div><h3>Bout-length distribution</h3></div></header><div class="chart" id="sleep-bout-chart"></div></article>
+      </div>
+      <div class="grid-2">
+        <article class="card"><header class="card-head"><span class="card-index">C</span><div><h3>Sleep categories by hour</h3><p>Standard bouts split by duration.</p></div></header><div class="chart" id="sleep-category-chart"></div></article>
+        <article class="card"><header class="card-head"><span class="card-index">D</span><div><h3>Sleep rebound</h3><p>Set baseline / deprivation / recovery days in Settings.</p></div></header><div class="chart" id="sleep-rebound-chart"></div></article>
+      </div>
+      <article class="card">
+        <header class="card-head"><span class="card-index">E</span><div><h3>Per-animal sleep summary</h3></div>
+          <button class="btn tiny ghost" id="btn-export-sleep" type="button">Export CSV</button>
+        </header>
+        <div class="table-wrap tall" id="sleep-table"></div>
+      </article>
+      <article class="card">
+        <header class="card-head"><span class="card-index">F</span><div><h3>Sleep bouts</h3><p>Bouts in the current window (up to 300 per animal).</p></div>
+          <button class="btn tiny ghost" id="btn-export-bouts" type="button">Export CSV</button>
+        </header>
+        <div class="table-wrap tall" id="sleep-bout-table"></div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 07 CIRCADIAN                                                 -->
+    <!-- ============================================================ -->
+    <section class="panel" id="sec-circadian">
+      <div class="section-head">
+        <div><p class="eyebrow">07 · Circadian</p><h2 class="display">Six ways to find τ.</h2></div>
+        <button class="btn primary" id="btn-run-circadian" type="button">Run periodograms</button>
+      </div>
+      <article class="card">
+        <div class="controls">
+          <label>Plot method
+            <select id="circ-method">
+              <option value="chi-square">Chi-square</option>
+              <option value="lomb-scargle">Lomb–Scargle</option>
+              <option value="autocorrelation">Autocorrelation</option>
+              <option value="fft">FFT</option>
+            </select>
+          </label>
+          <label>Primary method
+            <select id="circ-primary">
+              <option value="chi-square">Chi-square</option>
+              <option value="lomb-scargle">Lomb–Scargle</option>
+              <option value="autocorrelation">Autocorrelation</option>
+              <option value="fft">FFT</option>
+              <option value="cosinor">Cosinor</option>
+              <option value="onset">Onset regression</option>
+            </select>
+          </label>
+          <label>Group<select id="circ-group"><option value="__all">All groups</option></select></label>
+          <label class="check-label"><input type="checkbox" id="circ-show-individuals" checked> Show individuals</label>
+          <button class="btn primary" id="btn-render-periodogram" type="button">Render</button>
+        </div>
+        <p class="hint">Free-running τ is most meaningful in constant conditions. Select <strong>DD</strong> or <strong>LL</strong> in Settings for period estimation; <strong>ALL</strong> mixes entrained LD days with constant-condition days.</p>
+      </article>
+      <div class="kpi-grid" id="circ-kpis"></div>
+      <article class="card"><header class="card-head"><span class="card-index">A</span><div><h3>Periodogram</h3><p>Chi-square power is Qp − threshold; the dotted line is zero.</p></div></header><div class="chart tall" id="circ-periodogram"></div></article>
+      <div class="grid-2">
+        <article class="card"><header class="card-head"><span class="card-index">B</span><div><h3>Period distribution</h3><p>Rhythmic animals only.</p></div></header><div class="chart" id="circ-distribution"></div></article>
+        <article class="card"><header class="card-head"><span class="card-index">C</span><div><h3>Autocorrelation</h3><p>RI is the height of the third peak; dotted line = 0.3.</p></div></header><div class="chart" id="circ-autocorr"></div></article>
+      </div>
+      <article class="card"><header class="card-head"><span class="card-index">D</span><div><h3>Population periodogram</h3><p>Mean ± SEM across animals.</p></div></header><div class="chart" id="circ-population"></div></article>
+      <article class="card">
+        <header class="card-head"><span class="card-index">E</span><div><h3>Group rhythmicity</h3></div>
+          <button class="btn tiny ghost" id="btn-export-period" type="button">Export CSV</button>
+        </header>
+        <div class="table-wrap" id="circ-summary-table"></div>
+      </article>
+      <article class="card">
+        <header class="card-head"><span class="card-index">F</span><div><h3>Per-animal period results</h3></div></header>
+        <div class="table-wrap tall" id="circ-results-table"></div>
+      </article>
+      <article class="card">
+        <header class="card-head"><span class="card-index">G</span><div><h3>Validation</h3><p>Synthetic signals with known periods (23.5, 24, 25, 26 h) and property tests for sleep scoring.</p></div>
+          <button class="btn ghost small" id="btn-run-validation" type="button">Run validation</button>
+        </header>
+        <div class="grid-2">
+          <div class="table-wrap" id="validation-table"></div>
+          <div class="table-wrap" id="property-table"></div>
+        </div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 08 PHASE                                                     -->
+    <!-- ============================================================ -->
+    <section class="panel" id="sec-phase">
+      <div class="section-head">
+        <div><p class="eyebrow">08 · Phase &amp; anticipation</p><h2 class="display">When the day happens.</h2></div>
+        <button class="btn primary" id="btn-render-phase" type="button">Compute phase metrics</button>
+      </div>
+      <div class="kpi-grid" id="phase-kpis"></div>
+      <div class="grid-2">
+        <article class="card"><header class="card-head"><span class="card-index">A</span><div><h3>Circular activity profile</h3><p>Mean profile by ZT/CT.</p></div></header><div class="chart" id="phase-circular"></div></article>
+        <article class="card"><header class="card-head"><span class="card-index">B</span><div><h3>Anticipation indices</h3><p>MAI and EAI; 0.5 = flat, &gt;0.5 = anticipation.</p></div></header><div class="chart" id="phase-anticipation-chart"></div></article>
+      </div>
+      <article class="card">
+        <header class="card-head"><span class="card-index">C</span><div><h3>Group phase summary</h3></div>
+          <button class="btn tiny ghost" id="btn-export-phase" type="button">Export CSV</button>
+        </header>
+        <div class="table-wrap" id="phase-summary-table"></div>
+      </article>
+      <article class="card">
+        <header class="card-head"><span class="card-index">D</span><div><h3>Per-animal phase metrics</h3></div></header>
+        <div class="table-wrap tall" id="phase-table"></div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 09 STATISTICS                                                -->
+    <!-- ============================================================ -->
+    <section class="panel" id="sec-stats">
+      <div class="section-head">
+        <div><p class="eyebrow">09 · Statistics</p><h2 class="display">Compare, with effect sizes.</h2></div>
+        <button class="btn primary" id="btn-run-stats" type="button">Run comparison</button>
+      </div>
+      <article class="card">
+        <div class="controls">
+          <label>Metric<select id="stat-metric"></select></label>
+          <label>Group by
+            <select id="stat-groupvar"><option value="group">Group</option><option value="sex">Sex</option><option value="treatment">Treatment</option></select>
+          </label>
+          <label>Correction<select id="stat-correction"><option value="holm">Holm</option><option value="bh">Benjamini–Hochberg</option><option value="bonferroni">Bonferroni</option></select></label>
+          <label>Y min<input type="number" id="stat-ymin" placeholder="auto" step="any"></label>
+          <label>Y max<input type="number" id="stat-ymax" placeholder="auto" step="any"></label>
+        </div>
+      </article>
+      <article class="card"><header class="card-head"><span class="card-index">A</span><div><h3 id="stat-box-title">Box plot</h3></div><button class="btn tiny ghost" data-export="stat-box" type="button">Export</button></header><div class="chart tall" id="stat-box"></div></article>
+      <div class="grid-2">
+        <article class="card"><header class="card-head"><span class="card-index">B</span><div><h3>Descriptive statistics</h3></div></header><div class="table-wrap" id="stat-descriptive"></div></article>
+        <article class="card"><header class="card-head"><span class="card-index">C</span><div><h3>Normality (Shapiro–Wilk)</h3></div></header><div class="table-wrap" id="stat-shapiro"></div></article>
+      </div>
+      <article class="card"><header class="card-head"><span class="card-index">D</span><div><h3>Omnibus tests</h3></div></header><div class="table-wrap" id="stat-tests"></div></article>
+      <article class="card"><header class="card-head"><span class="card-index">E</span><div><h3>Post-hoc comparisons</h3><p>Pairwise Welch t with correction; Dunn for rank-based comparison.</p></div></header><div class="table-wrap" id="stat-posthoc"></div></article>
+      <article class="card"><header class="card-head"><span class="card-index">F</span><div><h3>Rhythmicity proportions</h3></div></header><div class="table-wrap" id="stat-proportion"></div></article>
+      <article class="card">
+        <header class="card-head"><span class="card-index">G</span><div><h3>Profile comparison</h3><p>Permutation test on the group-mean profile plus per-bin Welch tests with BH correction.</p></div>
+          <button class="btn ghost small" id="btn-profile-test" type="button">Compare profiles</button>
+        </header>
+        <div class="controls">
+          <label>Variable<select id="profile-test-variable"><option value="activity">Activity</option><option value="sleepMin">Sleep</option><option value="pWake">P(wake)</option><option value="pDoze">P(doze)</option></select></label>
+          <label>Group A<select id="profile-test-group-a"></select></label>
+          <label>Group B<select id="profile-test-group-b"></select></label>
+        </div>
+        <div class="chart" id="profile-test-chart"></div>
+        <div class="table-wrap" id="profile-test-result"></div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 10 EXPORT                                                    -->
+    <!-- ============================================================ -->
+    <section class="panel" id="sec-export">
+      <div class="section-head">
+        <div><p class="eyebrow">10 · Export</p><h2 class="display">Take it with you.</h2></div>
+      </div>
+      <div class="grid-2">
+        <article class="card">
+          <header class="card-head"><span class="card-index">A</span><div><h3>Data tables</h3><p>Tidy CSV files for downstream analysis.</p></div></header>
+          <div class="export-grid">
+            <button class="btn ghost" data-export-csv="animals" type="button">animals_summary.csv</button>
+            <button class="btn ghost" data-export-csv="timeseries" type="button">time_series.csv</button>
+            <button class="btn ghost" data-export-csv="bouts" type="button">bouts.csv</button>
+            <button class="btn ghost" data-export-csv="periodograms" type="button">periodograms.csv</button>
+            <button class="btn ghost" data-export-csv="profiles" type="button">profiles.csv</button>
+            <button class="btn ghost" data-export-csv="groupstats" type="button">group_stats.csv</button>
+            <button class="btn ghost" data-export-csv="phase" type="button">phase_metrics.csv</button>
+          </div>
+          <div class="row-buttons">
+            <button class="btn primary" id="btn-export-zip" type="button">Download complete package (.zip)</button>
+            <button class="btn ghost" id="btn-export-xlsx" type="button">Excel workbook (.xlsx)</button>
+          </div>
+        </article>
+        <article class="card">
+          <header class="card-head"><span class="card-index">B</span><div><h3>Figures</h3><p>PNG at high scale or SVG.</p></div></header>
+          <div class="controls">
+            <label>Figure<select id="export-figure-select">
+              <option value="profile-main">24-hour profile</option>
+              <option value="stat-box">Box plot</option>
+              <option value="circ-periodogram">Periodogram</option>
+              <option value="actogram-grid">Actograms</option>
+              <option value="sleep-profile-chart">Sleep profile</option>
+              <option value="phase-circular">Circular phase</option>
+            </select></label>
+            <label>Format<select id="export-format"><option value="png">PNG</option><option value="svg">SVG</option></select></label>
+            <label>Scale<select id="export-scale"><option value="2">2×</option><option value="3" selected>3×</option><option value="4">4×</option></select></label>
+            <button class="btn primary" id="btn-export-figure" type="button">Export figure</button>
+          </div>
+          <p class="hint">For multi-panel grids, PNG composes all plots; SVG is available for single figures.</p>
+        </article>
+      </div>
+      <article class="card">
+        <header class="card-head"><span class="card-index">C</span><div><h3>Report &amp; reproducibility</h3></div>
+          <button class="btn ghost small" id="btn-report" type="button">Generate HTML report</button>
+          <button class="btn ghost small" id="btn-print" type="button">Print / save as PDF</button>
+        </header>
+        <pre class="manifest" id="manifest-pre">Build a dataset to see the reproducibility manifest.</pre>
+      </article>
     </section>
   </main>
 
-  <footer class="app-footer">
-    Zantiks-to-Rethomics Behavioral Analyzer · runs entirely in your browser (all computation client-side) · v1.0
+  <footer class="footer">
+    <div class="footer-nav">
+      <a href="#import" data-goto="import"><span>01</span>Import</a>
+      <a href="#settings" data-goto="settings"><span>02</span>Settings</a>
+      <a href="#overview" data-goto="overview"><span>03</span>Overview</a>
+      <a href="#actograms" data-goto="actograms"><span>04</span>Actograms</a>
+      <a href="#profiles" data-goto="profiles"><span>05</span>Profiles</a>
+      <a href="#sleep" data-goto="sleep"><span>06</span>Sleep</a>
+      <a href="#circadian" data-goto="circadian"><span>07</span>Circadian</a>
+      <a href="#phase" data-goto="phase"><span>08</span>Phase</a>
+      <a href="#stats" data-goto="stats"><span>09</span>Statistics</a>
+      <a href="#export" data-goto="export"><span>10</span>Export</a>
+    </div>
+    <div class="footer-meta"><span>Chronobiology Workbench v2.0</span><span>Client-side · no data leaves your browser</span></div>
   </footer>
+</div>
 
-  <div id="toast-root"></div>
+<!-- ================= methods modal ================= -->
+<div class="modal" id="help-modal" aria-hidden="true">
+  <div class="modal-panel">
+    <button class="modal-close" id="btn-close-help" type="button" aria-label="Close">×</button>
+    <p class="eyebrow">Methods reference</p>
+    <h2 class="display">What is computed.</h2>
+    <div class="methods-grid">
+      <div><h3>Sleep</h3><p>Sleep is ≥5 consecutive minutes of immobility, assigned retroactively from the start of the run (Hendricks 2000; Shaw 2000). Bout categories: short ≤30 min, intermediate 30–60 min, long &gt;60 min.</p></div>
+      <div><h3>Circadian</h3><p>Chi-square periodogram (Sokolove &amp; Bushell 1978); Lomb–Scargle (Lomb 1976; Scargle 1982); autocorrelation and RI/RS (Levine et al. 2002); FFT; cosinor; onset regression.</p></div>
+      <div><h3>Phase</h3><p>IS and IV (van Someren 1999), M10/L5, relative amplitude, centre of gravity, acrophase, M/E peaks, day/night ratio and anticipation indices (Harrisingh 2007).</p></div>
+      <div><h3>Statistics</h3><p>Shapiro–Wilk, Welch/Student t, Mann–Whitney, one-way ANOVA, Kruskal–Wallis, Dunn, Fisher exact, chi-square, Holm/BH correction, Cohen's d and rank-biserial effect sizes.</p></div>
+    </div>
+    <p class="small muted">Full formulas, parameter definitions and references are in <code>METHODS.md</code> in the repository.</p>
+  </div>
+</div>
 
-  <!-- Plotly + app scripts -->
-  <script src="vendor/plotly.min.js"></script>
-  <script src="js/math.js"></script>
-  <script src="js/stats.js"></script>
-  <script src="js/periodogram.js"></script>
-  <script src="js/converter.js"></script>
-  <script src="js/metadata.js"></script>
-  <script src="js/analysis.js"></script>
-  <script src="js/colormaps.js"></script>
-  <script src="js/charts.js"></script>
-  <script src="js/sampleData.js"></script>
-  <script src="js/main.js"></script>
+<div id="toast-root"></div>
+
+<script src="vendor/plotly.min.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/sql-wasm.js"></script>
+<script src="js/core.js?v=2.0.3"></script>
+<script src="js/stats.js?v=2.0.3"></script>
+<script src="js/importers.js?v=2.0.3"></script>
+<script src="js/sleep.js?v=2.0.3"></script>
+<script src="js/circadian.js?v=2.0.3"></script>
+<script src="js/phase.js?v=2.0.3"></script>
+<script src="js/charts.js?v=2.0.3"></script>
+<script src="js/sample.js?v=2.0.3"></script>
+<script src="js/app.js?v=2.0.3"></script>
 </body>
 </html>

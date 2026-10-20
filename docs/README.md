@@ -1,113 +1,143 @@
-# Zantiks-to-Rethomics Behavioral Analyzer
+# Chronobiology Workbench
 
-A fully **client-side web application** that implements the complete workflow described in
-[`zantiks_rethomics_app_spec.md`](zantiks_rethomics_app_spec.md): it converts raw **Zantiks MWP**
-CSV output into standard **DAM** (Drosophila Activity Monitor) format and runs a Rethomics-style
-analysis pipeline (actograms, sleep & activity profiles, box plots, statistics, and chi-square
-periodograms) — entirely in the browser. No R server, no Python, no internet required (Plotly.js
-is bundled locally).
+A static, browser-based workbench for circadian and sleep analysis of *Drosophila* and other behavioural time series. Import DAM monitors, Zantiks plates, ethoscope recordings or generic CSV/Excel tables, score sleep, estimate period with six independent methods, quantify phase and anticipation, and compare groups — all client-side.
 
-This `docs/` folder is the single home for **both** the web application and its specification
-documents.
+**Live app (GitHub Pages):** `https://sofipol.github.io/Drosophila_behaviour_analysis/`
+
+No build step. No server. No data leaves the browser.
+
+---
 
 ## Quick start
 
-1. Open [`index.html`](index.html) in any modern browser (Chrome, Edge, Firefox, Safari).
-   - Double-click the file, or drag it into a browser window.
-2. **Tab 1 (Data Conversion):** click **“🎲 Load sample Zantiks data”** to try the demo dataset,
-   or drop in a real Zantiks CSV (e.g. `circadian_rhythms_glasgow-20250801T141426.csv`).
-   Click **“Convert to DAM Format”** and download `DAM_file.txt` if needed.
-3. **Tab 2 (Metadata Manager):** load the matching metadata CSV (sample or real), review the
-   validation report, edit any cell directly, then click **“Link data & Run Analysis”**.
-4. **Tabs 3–6:** render actograms, sleep/activity profiles, box plots + statistics, and
-   periodograms. Every panel has its own controls (binning resolution, colour map, LD/DD phase,
-   period range, alpha, …).
-5. **Tab 7 (Export):** download publication figures (PNG / SVG @ 300 DPI), cleaned summary
-   tables (`sleep_summary.csv`, `period_summary.csv`), the DAM file, and a self-contained HTML
-   report.
+### Open locally
 
-> 💡 Because everything runs locally, no data ever leaves your machine.
+1. Open `docs/index.html` in Chrome, Edge, Firefox or Safari.
+2. Click **Load synthetic demo** and then **Build & analyse dataset** to explore every panel immediately.
+3. To use your own data, drop a file into **01 Import** and follow the mapping prompts.
 
-## Documents
+> For local files, the page works from `file://`; the optional Ethoscope SQLite reader may require a local HTTP server because browsers restrict WebAssembly loading from `file://`.
 
-| File | Description |
+### Run a local server (recommended)
+
+```bash
+cd docs
+python -m http.server 8000
+```
+
+Then open <http://localhost:8000>.
+
+### Host on GitHub Pages
+
+The repository is already laid out so that the `docs/` folder is a complete static site.
+
+**Option A — deploy from the `docs/` folder**
+
+1. Push the repository to GitHub.
+2. Repository **Settings → Pages**.
+3. **Build and deployment → Source:** *Deploy from a branch*.
+4. **Branch:** `main` (or your default branch), **Folder:** `/docs`.
+5. Save. The site is published at `https://<user>.github.io/<repo>/`.
+
+**Option B — GitHub Actions**
+
+A workflow is included at `.github/workflows/pages.yml`. Set **Settings → Pages → Source** to *GitHub Actions*, then push to `main`. The workflow uploads `docs/` as the Pages artifact.
+
+---
+
+## What the app does
+
+| Section | Analysis |
 |---|---|
-| [`zantiks_rethomics_app_spec.md`](zantiks_rethomics_app_spec.md) | Full functional & technical specification (Markdown): input formats, DAM conversion algorithm, visualisations, statistics, UI architecture. |
-| [`zantiks_rethomics_app_spec.json`](zantiks_rethomics_app_spec.json) | Machine-readable version of the specification (JSON). |
-| [`zantiks_rethomics_app_spec.html`](zantiks_rethomics_app_spec.html) | Rendered HTML version of the specification (open in a browser). |
+| **01 Import** | DAM (24/32 channels, multiple monitors), Zantiks MWP, generic CSV/TSV/Excel (wide or long), ethoscope SQLite/CSV. Animal table, metadata join, QC flags, group assignment. |
+| **02 Settings** | Analysis bin, cycle length, ZT0, phase window, sleep thresholds, dead/missing rules, period search range, rhythmic criteria, anticipation/onset parameters, rebound windows, display options. |
+| **03 Overview** | KPIs, group summary, recording timeline, activity profile, QC table. |
+| **04 Actograms** | Individual and group-average single/double-plotted bar actograms; dark-phase shading, period line, sleep actogram, custom binning and scaling. |
+| **05 Profiles** | Activity, sleep, P(wake), P(doze), bout initiation/length, activity per awake minute; bars or lines, SEM/SD/95% CI, normalisation, circular view, raster. |
+| **06 Sleep** | Standard ≥5-min sleep, bout categories (short/intermediate/long), latency, WASO, fragmentation, brief awakenings, P(wake)/P(doze), bout distribution, architecture by hour, rebound. |
+| **07 Circadian** | Chi-square periodogram (Sokolove–Bushell), Lomb–Scargle, autocorrelation (RI/RS), FFT, cosinor and onset regression; consensus flags, population periodograms, synthetic validation and property tests. |
+| **08 Phase** | IS, IV, M10, L5, relative amplitude, centre of gravity, acrophase, M/E peaks, onset/offset, day/night ratio, MAI/EAI anticipation indices. |
+| **09 Statistics** | Shapiro–Wilk, Welch/Student t, Mann–Whitney, ANOVA, Kruskal–Wallis, Dunn, pairwise corrected tests, Fisher exact/chi-square, Cohen's d and rank-biserial effect sizes, profile permutation tests. |
+| **10 Export** | Tidy CSVs (`animals_summary`, `time_series`, `bouts`, `periodograms`, `profiles`, `group_stats`, `phase_metrics`), figures PNG/SVG, HTML report, print-to-PDF and a ZIP package with `manifest.json`. |
 
-## Features
+---
 
-| Tab | What it does |
-|-----|--------------|
-| 1 · Data Conversion | Parses Zantiks header (`Execution start`, experiment, apparatus, unit), 24 channels (A1–D6), converts to the 42-column DAM tab-separated format (`round(distance × 1000)` scaling, light status, zero-padded channels 25–32). |
-| 2 · Metadata Manager | Validates the 10 required columns, cross-checks `well` ⇄ `region_id`, datetime windows and missing values; interactive editable table; links metadata to the DAM channels. |
-| 3 · Actograms | Individual (per fly) and average-group tile heatmaps; 1/5/15/30/60-min binning; Viridis/Magma/Plasma/Standard colour maps. |
-| 4 · Sleep & Activity Profiles | Whole-experiment activity trajectory, 24-h wrapped sleep (fraction asleep) and activity profiles with automatic LD/dark shading; LD (entrainment) vs DD (free-running) vs all-days phase selection. |
-| 5 · Box Plots & Statistics | Daily sleep (min/day), daily activity, bout count, mean bout duration — box + jitter plots; Shapiro–Wilk normality, Wilcoxon rank-sum (2 groups) or Kruskal-Wallis + Dunn post-hoc (Bonferroni). |
-| 6 · Circadian Analysis | Chi-square periodogram (Sokolove & Bushell, 1978), peak period, power vs significance threshold, rhythmic/arrhythmic classification, per-genotype period distributions. |
-| 7 · Export | PNG/SVG figures, summary CSVs, DAM file, HTML report. |
+## Supported input formats
 
-## Methods implemented (in-browser)
+### DAM (TriKinetics)
 
-- **Sleep scoring:** a bin is sleep if it is part of a run of ≥ 5 consecutive minutes of zero
-  activity (standard *Drosophila* definition).
-- **Bout analysis:** maximal sleep runs → bout count and mean bout duration (min).
-- **Daily summaries:** per-fly, per-complete-day `sleep_min_day`, `activity_day`,
-  `bout_count_day`, `mean_bout_len_day`; box plots use per-fly means across complete days.
-- **Chi-square periodogram:** `Qp(τ) = τ·Σ_j(P_j − M·x̄)² / S²` with `df = τ − 1` (τ in
-  aggregation bins), periods expressed in hours (18–32 h default), 30-min internal aggregation.
-  Monte-Carlo calibrated (type-I error ≈ α).
-- **Statistics:** Shapiro-Wilk (exact port of `scipy.stats.shapiro` / Royston 1993),
-  Mann-Whitney U / Wilcoxon rank-sum (normal approx., tie-corrected), Kruskal-Wallis H,
-  Dunn's test with Bonferroni adjustment.
+Standard tab-separated monitor files with a date, time, light status and 24 or 32 channel columns. The parser detects the metadata width and light column automatically. Multiple files with the same time grid are merged; animal IDs become `Monitor:Channel`.
 
-## File layout
+### Zantiks MWP
+
+Quoted CSV with `RUNTIME`, `UNIT`, `TEMPERATURE`, `L_OR_D`, `DAY`, `HOUR`, `TIME_BIN`, `A1…D6`. The app parses large files line-by-line, preserves the original values, and can download a standard 32-channel DAM file (values ×1000).
+
+### Generic CSV/TSV/Excel
+
+- **Wide:** one row per time point and one numeric column per animal.
+- **Long:** columns for time, animal ID and value.
+- Mapping controls let you choose the time/timestamp column, time unit, light column and animal columns. Excel sheets are read with SheetJS.
+
+### Ethoscope
+
+- **SQLite `.db`:** `ROI_1…ROI_n` tables are read with sql.js. Movement is the maximum velocity in 10 s windows above the threshold; activity is summed distance.
+- **CSV export:** long format with `t`, ROI and `xy_dist_log10x1000`.
+
+### Metadata
+
+Upload a CSV with one row per animal. The app suggests columns for file/monitor, channel/ROI, animal ID, group/genotype, sex and treatment; you can remap them before applying. You can also edit group names directly in the animal table.
+
+---
+
+## Scientific notes
+
+- Sleep is ≥5 consecutive minutes of immobility, assigned retroactively from the start of the run (Hendricks 2000; Shaw 2000).
+- Day/night summaries use the light column in LD. In DD, “day” and “night” are the projected subjective day (CT 0–12) and night (CT 12–24), not the light value.
+- Chi-square power is \(Q_p - Q_p^{threshold}\). The strict rhythmic flag requires power ≥ 10 and peak width ≥ 2 h; the significant-peak column is reported separately.
+- The full formulas, parameters, defaults and references are in [`METHODS.md`](METHODS.md).
+- The application is a research tool, not a validated clinical device. Verify thresholds and methods against the original references before publication.
+
+---
+
+## Project structure
 
 ```
 docs/
-├── README.md                  # this file (project index + user guide)
-├── index.html                 # single-page UI (7 tabs) — open to launch the app
-├── css/styles.css             # dark scientific theme
+├── index.html                  # single-page application
+├── README.md                   # this guide
+├── METHODS.md                  # formulas, parameters, references
+├── TECHNICAL_SPEC.md           # full technical specification
+├── TECHNICAL_SPEC.json         # machine-readable specification
+├── css/styles.css              # editorial slate/cream theme
 ├── js/
-│   ├── math.js                # gamma, chi-square & normal distributions, basic stats
-│   ├── stats.js               # Shapiro-Wilk, Wilcoxon, Kruskal-Wallis, Dunn
-│   ├── periodogram.js         # chi-square periodogram (Sokolove-Bushell)
-│   ├── converter.js           # Zantiks CSV ⇄ DAM conversion
-│   ├── metadata.js            # metadata parsing, validation & linking
-│   ├── analysis.js            # sleep, bouts, summaries, 24-h profiles, phase detection
-│   ├── colormaps.js           # viridis / magma / plasma / standard
-│   ├── charts.js              # Plotly chart builders & export
-│   ├── sampleData.js          # deterministic synthetic demo dataset
-│   └── main.js                # app state & wiring
-├── vendor/plotly.min.js       # bundled Plotly.js (works offline)
-└── zantiks_rethomics_app_spec.{md,json,html}   # specification documents
+│   ├── core.js                 # distributions, statistics, CSV, downloads
+│   ├── stats.js                # hypothesis tests and effect sizes
+│   ├── importers.js            # DAM/Zantiks/generic/ethoscope adapters + QC
+│   ├── sleep.js                # sleep, bouts, activity, profiles
+│   ├── circadian.js            # χ², Lomb–Scargle, autocorrelation, FFT, cosinor, onset
+│   ├── phase.js                # IS/IV/RA/COG/anticipation
+│   ├── charts.js               # Plotly figures and figure export
+│   ├── sample.js               # deterministic demo + validation signals
+│   └── app.js                  # UI state, rendering, exports
+├── vendor/
+│   ├── plotly.min.js           # figures (bundled, offline)
+│   ├── jszip.min.js            # ZIP export
+│   ├── xlsx.full.min.js        # Excel import
+│   ├── sql-wasm.js             # SQLite import
+│   └── sql-wasm.wasm
+└── legacy/                     # previous Zantiks-only app (kept for reference)
 ```
 
-## Using real data
+---
 
-1. **Zantiks CSV** — must contain the 4 `Info` header rows and a `RUNTIME,UNIT,TEMPERATURE,L_OR_D,DAY,HOUR,TIME_BIN,A1..D6` header, with `A1`–`D6` activity columns.
-2. **Metadata CSV** — columns (order-independent):
-   `file, start_datetime, stop_datetime, region_id, well, genotype, sex, replicate, exp, observations`.
-   - `region_id` = channel (1–24), `well` = plate coordinate (A1–D6).
-   - `start_datetime` / `stop_datetime` define each fly's analysis window (`YYYY-MM-DD HH:MM:SS`
-     or `DD/MM/YYYY HH:MM:SS`).
-   - `observations` can be used to include/exclude animals (`alive`/`dead`); all rows are
-     currently included — edit the table to filter.
-3. Datetimes in the DAM file are reconstructed from the `Date`/`Time` columns, so linking uses
-   the absolute timestamps written during conversion.
+## Browser requirements
 
-## Troubleshooting
+- A modern browser with ES2017, Canvas and WebAssembly (Chrome, Edge, Firefox, Safari).
+- `FileReader`, `Blob` and `URL.createObjectURL` for import/export.
+- For the Ethoscope SQLite adapter, serve over HTTP so the `.wasm` file can load.
 
-- **“Start datetime: unknown”** — the CSV header row must be `0,Info,<DATETIME>,Service '…' : Execution start`.
-- **No flies linked** — check `region_id`/`well` consistency and that the metadata datetime
-  windows overlap the DAM record.
-- **Charts blank on a tab** — charts are rendered in the background and resized when you open
-  the tab; if a panel is empty, re-run its “Render” button after switching to it.
-- **Cache** — after updating files, hard-refresh (`Ctrl+F5`) so the browser reloads the JS.
+---
 
-## License / notes
+## License and citation
 
-Demo dataset is synthetic (deterministic seed) and intended for testing and teaching. Statistical
-tests follow standard non-parametric practice; verify thresholds (e.g. α) suit your experimental
-design.
+The app is provided for research and teaching. If you use it in a publication, cite the methods above and the original references listed in `METHODS.md`. The demo dataset is synthetic and deterministic; it is not real experimental data.

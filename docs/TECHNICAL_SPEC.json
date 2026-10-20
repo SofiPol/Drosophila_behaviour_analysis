@@ -1,0 +1,239 @@
+{
+  "schema_version": "1.0",
+  "title": "Circadian & Sleep Analysis App: Technical Specification",
+  "description": "Machine-readable specification of inputs, parameters, algorithms, outputs and visualisations for circadian and sleep analysis of DAM, ethoscope and generic behavioural data.",
+  "notes": "Verify defaults and references against the original papers before release.",
+  "time_conventions": {
+    "ZT0": "lights on",
+    "CT0": "subjective dawn (ZT0 projected from last LD cycle)",
+    "cycle_length_hours": 24,
+    "day_index": "floor((t - t_ZT0) / T) + 1",
+    "time_of_day": "(t - t_ZT0) mod T"
+  },
+  "parameters": {
+    "raw_bin_min": {"default": 1, "range": [1, 60], "note": "Detected from file"},
+    "analysis_bin_min": {"default": 30, "range": [1, 60]},
+    "cycle_length_h": {"default": 24, "note": "Use for T-cycles"},
+    "photoperiod": {"default": "12:12", "source": "light column"},
+    "sleep_min_duration_min": {"default": 5, "range": [1, 30]},
+    "immobility_threshold": {"dam": "counts == 0", "ethoscope": "max velocity < 1 (10 s windows)", "generic": "activity <= user threshold"},
+    "dead_animal_rule_h": {"default": 24, "note": "No activity for this long = dead"},
+    "max_missing_fraction": {"default": 0.1},
+    "period_range_h": {"default": [16, 32], "step_h": 0.1},
+    "chi_square_alpha": {"default": 0.05, "options": [0.05, 0.01]},
+    "rhythmic_criteria": {"chi_square": {"power_min": 10, "width_min_h": 2}, "autocorrelation": {"RI_min": 0.3, "weak_RI_range": [0.1, 0.3]}},
+    "min_days_for_period": {"default": 5},
+    "ld_analysis_days": {"default": "day 3 to last full day"},
+    "anticipation_windows_h": {"short": 3, "long": 6},
+    "error_bars": {"default": "SEM", "options": ["SD", "CI95"]}
+  },
+  "input_adapters": [
+    {
+      "id": "dam",
+      "name": "TriKinetics DAM (DAM2/DAM5)",
+      "format": "tab-separated text, one row per time bin (usually 1 min)",
+      "columns": ["index", "date", "time", "monitor_status", "extra", "light_status", "channel_1..channel_32"],
+      "value": "beam crossings per bin",
+      "one_animal_per": "channel",
+      "metadata": "user table (monitor, channel, genotype, sex, ...)"
+    },
+    {
+      "id": "ethoscope",
+      "name": "Ethoscope SQLite",
+      "format": "SQLite .db, tables ROI_1..ROI_20 plus METADATA, VAR_MAP, ROI_MAP",
+      "columns": ["id", "t_ms", "x", "y", "w", "h", "phi", "xy_dist_log10x1000", "is_inferred", "has_interacted"],
+      "formulas": {
+        "distance": "10^(xy_dist_log10x1000 / 1000)",
+        "velocity": "distance / dt_seconds"
+      },
+      "classification": {
+        "window_s": 10,
+        "statistic": "max velocity per window",
+        "moving_if": "max velocity > threshold (default 1.0 after velocity correction)",
+        "missing": "NA, not immobile"
+      }
+    },
+    {
+      "id": "generic",
+      "name": "CSV / Excel",
+      "format": "wide or long, user-mapped columns",
+      "required_mapping": ["timestamp or elapsed time", "animal id/columns", "value"],
+      "optional_mapping": ["light"]
+    }
+  ],
+  "canonical_table": {
+    "fields": ["experiment_id", "animal_id", "t_s", "activity", "moving", "light", "metadata"]
+  },
+  "activity_metrics": [
+    {"id": "daily_total", "formula": "A_day(d) = sum(x_i in day d)"},
+    {"id": "mean_daily", "formula": "mean of A_day(d) over selected days"},
+    {"id": "light_dark", "formula": "sum of x_i with light=1 / light=0"},
+    {"id": "light_fraction", "formula": "A_light / (A_light + A_dark)"},
+    {"id": "activity_per_awake_min", "formula": "A_total / awake minutes"},
+    {"id": "normalised_profile", "formula": "bin activity / daily total"}
+  ],
+  "sleep": {
+    "definition": ">= 5 consecutive minutes of immobility (Hendricks 2000; Shaw 2000)",
+    "algorithm": [
+      "immobile[i] = activity[i] <= threshold",
+      "find runs of consecutive immobile bins",
+      "mark runs >= min_sleep_duration as sleep, from run start",
+      "build bout table (start, end, duration, truncated flag)"
+    ],
+    "outputs": [
+      {"id": "sleep_per_bin", "formula": "asleep minutes in bin"},
+      {"id": "total_sleep_24h", "formula": "sum asleep minutes per day"},
+      {"id": "day_night_sleep", "formula": "asleep minutes in light / dark phase"},
+      {"id": "percent_sleep", "formula": "100 * asleep minutes / total minutes"},
+      {"id": "bout_number", "formula": "count of bouts starting in window"},
+      {"id": "mean_bout_length", "formula": "total sleep minutes / number of bouts"},
+      {"id": "max_median_bout_length", "formula": "from bout table"},
+      {"id": "latency", "formula": "minutes from lights-off (or on) to first sleep bout start"},
+      {"id": "WASO", "formula": "awake minutes between first sleep onset and end of dark phase"},
+      {"id": "fragmentation", "formula": "bouts per hour of sleep, or per day"},
+      {"id": "P_wake", "formula": "N(inactive->active)/N(inactive)", "reference": "Wiggin 2020"},
+      {"id": "P_doze", "formula": "N(active->inactive)/N(active)", "reference": "Wiggin 2020"}
+    ],
+    "bout_histogram_classes_min": [[5, 10], [10, 30], [30, 60], [60, 120], [120, null]]
+  },
+  "circadian_methods": [
+    {
+      "id": "chi_square",
+      "name": "Chi-square periodogram",
+      "reference": "Sokolove & Bushell 1978",
+      "formula": "Qp = K * N' * sum_h (M_h - M)^2 / sum_i (X_i - M)^2",
+      "definitions": "P trial period in bins; K = floor(N/P); N' = K*P; M_h column means; M grand mean",
+      "significance": "chi-square critical value, df = P - 1, alpha = 0.05",
+      "outputs": ["tau = P at max Qp * bin", "power = Qp - threshold", "peak width at significance line", "rhythmic flag"]
+    },
+    {
+      "id": "lomb_scargle",
+      "name": "Lomb-Scargle periodogram",
+      "reference": "Lomb 1976; Scargle 1982",
+      "formula": "PN(w) = 1/(2 s^2) [ (sum (x_j - xbar) cos(w(t_j - tau_LS)))^2 / sum cos^2(w(t_j - tau_LS)) + (sum (x_j - xbar) sin(w(t_j - tau_LS)))^2 / sum sin^2(w(t_j - tau_LS)) ]",
+      "significance": "p = 1 - (1 - exp(-z))^M",
+      "note": "Handles uneven sampling and gaps"
+    },
+    {
+      "id": "autocorrelation",
+      "name": "Autocorrelation",
+      "reference": "Levine et al. 2002",
+      "formula": "r_k = sum_{i=1..N-k} (x_i - xbar)(x_{i+k} - xbar) / sum (x_i - xbar)^2",
+      "outputs": ["period = lag of highest peak after lag 0", "RI = height of 3rd peak", "RS = RI / (2 / sqrt(N))"]
+    },
+    {
+      "id": "fft",
+      "name": "Fourier spectrum",
+      "formula": "X(f_k) = sum x_n exp(-2*pi*i*k*n/N); Power = |X|^2 / N; period = 1/f",
+      "preprocessing": ["detrend", "optional Hann window", "zero-padding"]
+    },
+    {
+      "id": "cosinor",
+      "name": "Cosinor",
+      "formula": "y = M + beta*cos(w t) + gamma*sin(w t); A = sqrt(beta^2 + gamma^2); phi = atan2(-gamma, beta)",
+      "outputs": ["mesor", "amplitude", "acrophase", "percent rhythm = 100*R^2", "F-test p"]
+    },
+    {
+      "id": "onset_regression",
+      "name": "Onset-based period",
+      "formula": "tau = 24 + slope of onset time vs day",
+      "onset_rule": "first crossing of 20% of max smoothed daily activity, sustained",
+      "outputs": ["tau", "R2", "SD of onsets"]
+    }
+  ],
+  "nonparametric_indices": [
+    {"id": "IS", "formula": "N * sum_h (xh_mean - xbar)^2 / (p * sum_i (x_i - xbar)^2)", "range": [0, 1]},
+    {"id": "IV", "formula": "N * sum_i (x_i - x_{i-1})^2 / ((N - 1) * sum_i (x_i - xbar)^2)", "range": [0, 2]},
+    {"id": "M10", "formula": "mean of most active 10 h of mean 24 h profile"},
+    {"id": "L5", "formula": "mean of least active 5 h of mean 24 h profile"},
+    {"id": "RA", "formula": "(M10 - L5) / (M10 + L5)", "range": [0, 1]},
+    {"id": "COG", "formula": "atan2(sum x_i sin(theta_i), sum x_i cos(theta_i)), theta_i = 2*pi*tod_i / T"},
+    {"id": "day_night_ratio", "formula": "A_light / A_dark"}
+  ],
+  "anticipation_indices": [
+    {
+      "id": "ratio_index",
+      "reference": "Harrisingh et al. 2007",
+      "morning": "A(ZT21-ZT24) / A(ZT18-ZT24)",
+      "evening": "A(ZT9-ZT12) / A(ZT6-ZT12)",
+      "general": "A(t_transition - 3 h, t_transition) / A(t_transition - 6 h, t_transition)",
+      "range": [0, 1],
+      "interpretation": "0.5 = flat; > 0.5 = anticipation"
+    },
+    {
+      "id": "difference_ratio",
+      "formula": "[A(last 3 h) - A(previous 3 h)] / A(last 6 h)",
+      "range": [-1, 1],
+      "note": "Equals 2 * ratio_index - 1"
+    },
+    {
+      "id": "slope_index",
+      "formula": "linear regression slope of normalised activity vs time in the last 3-6 h",
+      "outputs": ["slope", "95% CI"]
+    }
+  ],
+  "anticipation_settings": {
+    "bin_min": 30,
+    "days": "LD day 3 to 6",
+    "na_rule": "NA if A(last 6 h) == 0 or counts below minimum",
+    "stats": ["Mann-Whitney", "Kruskal-Wallis", "ANOVA on arcsine-transformed values"]
+  },
+  "profiles": [
+    {"id": "activity_profile", "steps": ["mean over days per animal and bin", "mean across animals", "SEM"], "normalisation_options": ["daily mean", "maximum", "z-score", "fraction of daily total"]},
+    {"id": "sleep_profile", "variable": "minutes asleep per hour or % per bin", "overlays": ["bout number per hour", "mean bout length per hour"]},
+    {"id": "transition_profile", "variables": ["P_wake", "P_doze"]},
+    {"id": "raster", "description": "animals on rows, time on x, state as colour"}
+  ],
+  "actograms": [
+    {"id": "individual_single", "layout": "row d = day d, x = 0-24 h"},
+    {"id": "individual_double", "layout": "row d = days d and d+1, x = 0-48 h"},
+    {"id": "average", "method": "per-animal normalisation, then mean/median per day and bin", "dd_note": "align to own onset/phase or tau if taus differ"},
+    {"id": "sleep_actogram", "variable": "sleep or sleep bouts"}
+  ],
+  "actogram_options": {
+    "scaling": ["common maximum", "per-animal maximum", "percentile cap (e.g. 99th)"],
+    "overlays": ["dark shading", "onset/offset lines", "period line", "LD to DD marker"],
+    "alignment": ["zeitgeber", "tau-aligned"],
+    "export": ["PNG", "SVG", "PDF"]
+  },
+  "quality_control": [
+    "equidistant bins; fill gaps with NA",
+    "dead animal removal after 24 h without activity",
+    "exclude animals with excessive missing data",
+    "discard acclimation days in LD"
+  ],
+  "output_tables": {
+    "animals_summary": ["metadata", "alive", "activity total/day/night", "sleep total/day/night", "bouts number/mean/max", "latency", "P_wake", "P_doze", "tau", "power", "width", "RI", "RS", "rhythmic", "IS", "IV", "RA", "COG", "MAI", "EAI"],
+    "time_series": ["animal_id", "t", "activity", "moving", "asleep", "light", "ZT/CT", "day"],
+    "bouts": ["animal_id", "start", "end", "duration", "ZT", "light_phase"],
+    "periodograms": ["animal_id", "period", "Qp", "threshold", "LS", "autocorrelation", "FFT"],
+    "profiles": ["group", "bin", "mean", "SEM", "n"],
+    "group_stats": ["group", "mean", "SEM", "n", "test", "p"]
+  },
+  "statistics": {
+    "two_groups": ["Welch t-test", "Mann-Whitney"],
+    "multi_group": ["ANOVA + Tukey/Dunnett", "Kruskal-Wallis + Dunn"],
+    "proportions": ["Fisher exact", "chi-square"],
+    "profiles": ["two-way repeated-measures ANOVA", "permutation tests"],
+    "correction": ["Holm", "Benjamini-Hochberg"],
+    "effect_sizes": ["Cohen d", "rank-biserial"]
+  },
+  "validation": [
+    "compare with ShinyR-DAM, Rethomics/sleepr, ClockLab, SCAMP, pySolo",
+    "synthetic signals with known tau (23.5, 24, 25 h) plus noise and gaps",
+    "property tests: no sleep bout < 5 min; sum of binned sleep = total sleep"
+  ],
+  "references": [
+    "Sokolove & Bushell 1978, J Theor Biol 72:131-160",
+    "Lomb 1976, Astrophys Space Sci 39:447-462",
+    "Scargle 1982, Astrophys J 263:835-853",
+    "Levine, Funes, Dowse, Hall 2002, BMC Neurosci 3:1",
+    "Hendricks et al. 2000, Neuron 25:129-138",
+    "Shaw et al. 2000, Science 287:1834-1837",
+    "Harrisingh et al. 2007, J Neurosci 27:12489-12499",
+    "Wiggin et al. 2020, PNAS 117:10024-10034",
+    "Van Someren et al. 1999, Chronobiol Int 16:505-518",
+    "Geissmann et al. 2019, PLoS Biol 17:e3000461",
+    "Cichewicz & Hirsh 2018, Fly 12:19-25"
+  ]
+}

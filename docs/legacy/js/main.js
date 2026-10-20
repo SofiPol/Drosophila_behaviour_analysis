@@ -455,13 +455,19 @@
     if (!state.flies.length) { toast('Link a dataset first (Tab 2)', 'error'); return; }
     const metric = $('box-metric').value;
     const cap = parseFloat($('box-cap').value);
+    const subtractHalf = $('ai-subtract-half') && $('ai-subtract-half').checked;
     state.boxMetric = metric;
+
+    // Recalculate flyLevel with subtractHalf setting if AI is selected or checkbox toggled
+    state.flyLevel = A.flyLevelSummaries(state.flies, { subtractHalf });
 
     const labels = {
       sleepMinDay: 'Total Daily Sleep (min/day)',
       activityDay: 'Total Daily Activity (counts/day)',
       boutCountDay: 'Sleep Bout Count (per day)',
-      meanBoutLenDay: 'Mean Bout Duration (min)'
+      meanBoutLenDay: 'Mean Bout Duration (min)',
+      morningAI: 'Morning Anticipation Index (MAI, ZT 21-24 vs ZT 18-24)',
+      eveningAI: 'Evening Anticipation Index (EAI, ZT 9-12 vs ZT 6-12)'
     };
     $('box-title').childNodes[0].textContent = labels[metric] + ' — ';
     CH.boxPlot(state.flyLevel, metric, $('chart-box'), { outlierCut: Number.isFinite(cap) && cap > 0 ? cap : 0 });
@@ -469,7 +475,11 @@
 
     // statistics
     const genotypes = A.uniqueGenotypes(state.flyLevel.map((r) => r.fly));
-    const groups = genotypes.map((g) => state.flyLevel.filter((r) => r.genotype === g).map((r) => r[metric]));
+    const groups = genotypes.map((g) =>
+      state.flyLevel
+        .filter((r) => r.genotype === g && r[metric] !== null && Number.isFinite(r[metric]))
+        .map((r) => r[metric])
+    );
 
     // Shapiro-Wilk
     const shapiroRows = genotypes.map((g, gi) => {

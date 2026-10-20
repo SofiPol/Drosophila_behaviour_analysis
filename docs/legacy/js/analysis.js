@@ -122,6 +122,43 @@ window.ZAnalysis = (function () {
     return { count, meanDurationMin: meanDur, durations };
   }
 
+  /* ---------------- Anticipation Index (MAI & EAI) ---------------- */
+  /**
+   * Helper to check circular 24h window membership.
+   */
+  function inWindow(zt, start, end) {
+    const ztNorm = ((zt % 24) + 24) % 24;
+    const startNorm = ((start % 24) + 24) % 24;
+    const endNorm = ((end % 24) + 24) % 24;
+    if (startNorm < endNorm) {
+      return ztNorm >= startNorm && ztNorm < endNorm;
+    } else {
+      return ztNorm >= startNorm || ztNorm < endNorm;
+    }
+  }
+
+  /**
+   * Canonical anticipation index calculation:
+   * w3 = activity in the 3h preceding transition
+   * w6 = activity in the 6h preceding transition
+   * AI = w3 / w6 if w6 > 0 else null (optionally subtract 0.5)
+   */
+  function anticipationIndex(bins, transitionZt, subtractHalf) {
+    let w3 = 0;
+    let w6 = 0;
+    for (let i = 0; i < bins.length; i++) {
+      const zt = bins[i].zt;
+      const a = bins[i].a;
+      if (inWindow(zt, transitionZt - 3, transitionZt)) w3 += a;
+      if (inWindow(zt, transitionZt - 6, transitionZt)) w6 += a;
+    }
+    if (w6 > 0) {
+      const val = w3 / w6;
+      return subtractHalf ? val - 0.5 : val;
+    }
+    return null;
+  }
+
   /* ---------------- Daily summaries ---------------- */
   /**
    * Returns per-fly per-day summaries. Days must be at least `minCompleteFraction`
@@ -130,6 +167,7 @@ window.ZAnalysis = (function () {
    */
   function dailySummaries(flies, opts) {
     const minComplete = (opts && opts.minCompleteFraction) || 0.85;
+    const subtractHalf = (opts && opts.subtractHalf) || false;
     const out = [];
     for (const fly of flies) {
       if (!fly.sleep) continue;
@@ -138,10 +176,11 @@ window.ZAnalysis = (function () {
       const dayMap = new Map();
       for (let i = 0; i < fly.dayIdx.length; i++) {
         const d = fly.dayIdx[i];
-        if (!dayMap.has(d)) dayMap.set(d, { n: 0, sleep: 0, act: 0, boutRun: 0, bouts: [], inBout: false });
+        if (!dayMap.has(d)) dayMap.set(d, { n: 0, sleep: 0, act: 0, boutRun: 0, bouts: [], bins: [] });
         const rec = dayMap.get(d);
         rec.n++;
         rec.act += fly.activity[i];
+        rec.bins.push({ zt: fly.todHours[i], a: fly.activity[i] });
         if (fly.sleep[i] === 1) {
           rec.sleep += 1;
           rec.boutRun++;
@@ -155,12 +194,20 @@ window.ZAnalysis = (function () {
         const scale = binsPerDay / Math.max(1, rec.n); // normalize partial days
         const boutCount = rec.bouts.length;
         const meanBoutLen = boutCount ? M.mean(rec.bouts) * binMin : 0;
+        
+        // Morning AI: transition at ZT 0 / 24 (lights-on)
+        const morningAI = anticipationIndex(rec.bins, 0, subtractHalf);
+        // Evening AI: transition at ZT 12 (lights-off)
+        const eveningAI = anticipationIndex(rec.bins, 12, subtractHalf);
+
         out.push({
           fly, day,
           sleepMin: rec.sleep * binMin * scale,
           activity: rec.act * scale,
           boutCount,
           meanBoutLen,
+          morningAI,
+          eveningAI,
           n: rec.n
         });
       }
@@ -176,13 +223,15 @@ window.ZAnalysis = (function () {
     const byFly = new Map();
     for (const d of daily) {
       if (!byFly.has(d.fly.id)) {
-        byFly.set(d.fly.id, { fly: d.fly, sleep: [], act: [], bouts: [], boutLen: [] });
+        byFly.set(d.fly.id, { fly: d.fly, sleep: [], act: [], bouts: [], boutLen: [], mai: [], eai: [] });
       }
       const rec = byFly.get(d.fly.id);
       rec.sleep.push(d.sleepMin);
       rec.act.push(d.activity);
       rec.bouts.push(d.boutCount);
       rec.boutLen.push(d.meanBoutLen);
+      if (d.morningAI !== null && !isNaN(d.morningAI)) rec.mai.push(d.morningAI);
+      if (d.eveningAI !== null && !isNaN(d.eveningAI)) rec.eai.push(d.eveningAI);
     }
     const out = [];
     for (const rec of byFly.values()) {
@@ -198,10 +247,14 @@ window.ZAnalysis = (function () {
         activityDay: M.mean(rec.act),
         boutCountDay: M.mean(rec.bouts),
         meanBoutLenDay: M.mean(rec.boutLen),
+        morningAI: rec.mai.length ? M.mean(rec.mai) : null,
+        eveningAI: rec.eai.length ? M.mean(rec.eai) : null,
         sleepMinValues: rec.sleep,
         activityValues: rec.act,
         boutCountValues: rec.bouts,
-        meanBoutLenValues: rec.boutLen
+        meanBoutLenValues: rec.boutLen,
+        morningAIValues: rec.mai,
+        eveningAIValues: rec.eai
       });
     }
     return out;
@@ -398,6 +451,8 @@ window.ZAnalysis = (function () {
     wholeExperiment,
     phaseRestrictedActivity,
     aggregateSubMinute,
-    periodogramSummary
+    periodogramSummary,
+    anticipationIndex,
+    inWindow
   };
 })();
