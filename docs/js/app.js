@@ -623,6 +623,7 @@
         if (C.isNum(miss) && miss > state.settings.maxMissing) flags.push(`${(miss * 100).toFixed(1)}% missing`);
         if (C.isNum(meanDay) && meanDay < state.settings.lowActivity) flags.push('low activity');
       }
+      if (c.metadata && !c.genotype) flags.push('metadata genotype missing');
       const meta = state.animals.find((a) => a.key === c.key);
       if (meta && meta.flags) flags = meta.flags;
       return { c, i, flags, meanDay, miss };

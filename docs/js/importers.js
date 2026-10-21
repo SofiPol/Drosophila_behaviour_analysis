@@ -1011,6 +1011,7 @@
         deadDay: null,
         alive: true
       };
+      if (cfg.metadata && !cfg.genotype) animal.flags.push('metadata genotype missing');
       // QC: dead run detection
       const deadHours = settings.deadHours ?? 24;
       const deadBins = Math.round(deadHours * 60 / reg.binMinutes);
