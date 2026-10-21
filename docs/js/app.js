@@ -32,6 +32,11 @@
     dataset: null,
     configs: [],
     animals: [],
+    fullAnimals: [],
+    fullSummaries: [],
+    fullCircadian: [],
+    fullPhaseRows: [],
+    scope: { experiments: null, replicates: null },
     phaseMap: new Map(),
     metadata: null,
     metadataFile: null,
@@ -305,6 +310,13 @@
     window.addEventListener('hashchange', () => setSection((location.hash || '#import').slice(1), { silent: true }));
     $('btn-help').addEventListener('click', () => $('help-modal').classList.add('open'));
     $('btn-theme').addEventListener('click', () => applyTheme(state.theme === 'dark' ? 'light' : 'dark', { persist: true, refresh: true }));
+    $('scope-experiment-chips').addEventListener('change', onScopeChange);
+    $('scope-replicate-chips').addEventListener('change', onScopeChange);
+    $('scope-all').addEventListener('click', () => {
+      state.scope = { experiments: null, replicates: null };
+      populateScopeControls();
+      onScopeChange();
+    });
     $('btn-close-help').addEventListener('click', () => $('help-modal').classList.remove('open'));
     $('help-modal').addEventListener('click', (e) => { if (e.target === $('help-modal')) $('help-modal').classList.remove('open'); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('help-modal').classList.remove('open'); });
@@ -328,6 +340,7 @@
     $('btn-clear-import').addEventListener('click', () => {
       state.parsed = null; state.parsedWide = null; state.dataset = null; state.configs = [];
       state.animals = []; state.summaries = []; state.circadian = []; state.phaseRows = []; state.metricsRows = [];
+      state.fullAnimals = []; state.fullSummaries = []; state.fullCircadian = []; state.fullPhaseRows = [];
       state.phaseMap = new Map(); state.actogramPage = 0;
       $('parser-card').classList.add('hidden');
       $('dataset-card').classList.add('hidden');
@@ -381,12 +394,18 @@
     state.dataset = null;
     state.configs = [];
     state.animals = [];
+    state.fullAnimals = [];
+    state.fullSummaries = [];
+    state.fullCircadian = [];
+    state.fullPhaseRows = [];
+    state.scope = { experiments: null, replicates: null };
     state.summaries = [];
     state.circadian = [];
     state.phaseRows = [];
     state.metricsRows = [];
     state.metadataStats = null;
     updateMetadataStatus();
+    updateScopeCount();
     $('dataset-card').classList.add('hidden');
     $('meta-mapping').classList.toggle('hidden', !state.metadata);
     const statuses = files.map((f) => ({ name: f.name, status: 'queued' }));
@@ -438,17 +457,34 @@
   function mergeWideDatasets(list) {
     if (list.length === 1) return list[0];
     const base = list[0];
+    const clockOf = (d) => {
+      if (C.isNum(d.startClockHour)) return d.startClockHour;
+      if (d.times && d.times[0] instanceof Date) {
+        const t = d.times[0];
+        return t.getHours() + t.getMinutes() / 60 + t.getSeconds() / 3600;
+      }
+      return 0;
+    };
     const compatible = list.every((d) =>
-      d.times && base.times && d.times.length === base.times.length &&
-      d.times[0] instanceof Date && base.times[0] instanceof Date &&
-      Math.abs(d.times[0] - base.times[0]) < 1000 &&
-      Math.abs((d.binMinutes || 1) - (base.binMinutes || 1)) < 1e-6
+      d.times && base.times &&
+      Math.abs((d.binMinutes || 1) - (base.binMinutes || 1)) < 1e-6 &&
+      Math.abs(clockOf(d) - clockOf(base)) < 1e-6
     );
     if (!compatible) {
-      toast('Files have different time grids; using the first file only. Convert them to a common grid before merging.', 'error');
+      toast('Files must have the same bin size and start clock. Different experiment dates and durations are allowed.', 'error');
       return base;
     }
-    const out = Object.assign({}, base, { series: {}, labels: {}, keys: [] });
+    const maxN = C.max(list.map((d) => d.times.length));
+    const binMin = base.binMinutes || 1;
+    const times = [];
+    if (base.times[0] instanceof Date) {
+      for (let i = 0; i < maxN; i++) times.push(new Date(base.times[0].getTime() + i * binMin * 60000));
+    } else {
+      for (let i = 0; i < maxN; i++) times.push(i * binMin / 60);
+    }
+    const light = Array.isArray(base.light) ? base.light.slice(0, maxN) : [];
+    while (light.length < maxN) light.push(null);
+    const out = Object.assign({}, base, { times, light, series: {}, labels: {}, keys: [] });
     const prefixCounts = new Map();
     list.forEach((d) => {
       let basePrefix = list.length > 1 ? (d.name || 'file').replace(/\.[^.]+$/, '') : '';
@@ -458,7 +494,9 @@
       const prefix = basePrefix ? basePrefix + ':' : '';
       (d.keys || Object.keys(d.series)).forEach((key) => {
         const newKey = prefix + key;
-        out.series[newKey] = d.series[key];
+        const vals = (d.series[key] || []).slice(0, maxN);
+        while (vals.length < maxN) vals.push(NaN);
+        out.series[newKey] = vals;
         out.labels[newKey] = prefix + (d.labels && d.labels[key] ? d.labels[key] : key);
         out.keys.push(newKey);
       });
@@ -594,16 +632,32 @@
     I.addCircadianTime(reg, state.settings);
     state.dataset = reg;
     state.animals = [];
+    state.fullAnimals = [];
+    state.fullSummaries = [];
+    state.fullCircadian = [];
+    state.fullPhaseRows = [];
+    state.scope = { experiments: null, replicates: null };
     state.summaries = [];
     state.circadian = [];
     state.phaseRows = [];
     state.metricsRows = [];
     state.phaseMap = new Map();
+    updateScopeCount();
+    const allKeys = reg.keys || Object.keys(reg.series || {});
     state.configs = I.configsFromWide(reg).map((c, i) => {
       const parts = String(c.key).split(':');
       const chPart = parts.length > 1 ? parts[1] : '';
-      c.file = parts.length > 1 ? parts[0] : (w.name || '');
-      c.channel = /^Ch\d+$/i.test(chPart) ? parseInt(chPart.slice(2), 10) : (c.channel || i + 1);
+      const prefix = parts.length > 1 ? parts[0] : '';
+      c.file = parts.length > 1 ? prefix : (w.name || '');
+      if (/^Ch\d+$/i.test(chPart)) {
+        c.channel = parseInt(chPart.slice(2), 10);
+      } else {
+        const siblings = allKeys.filter((k) => {
+          const p = String(k).split(':');
+          return parts.length > 1 ? p[0] === prefix : p.length === 1;
+        });
+        c.channel = Math.max(1, siblings.indexOf(c.key) + 1);
+      }
       c.well = (w.labels && w.labels[c.key]) || c.key;
       return c;
     });
@@ -650,7 +704,7 @@
       if (meta && meta.flags) flags = meta.flags;
       return { c, i, flags, meanDay, miss };
     });
-    let html = '<table><thead><tr><th>Use</th><th>Animal ID</th><th>Source</th><th>Channel / well</th><th>Genotype</th><th>Group</th><th>Sex</th><th>Treatment</th><th class="num">Act./day</th><th class="num">Missing</th><th>Flags</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Use</th><th>Animal ID</th><th>Source</th><th>Channel / well</th><th>Experiment</th><th>Replicate</th><th>Genotype</th><th>Group</th><th>Sex</th><th>Treatment</th><th class="num">Act./day</th><th class="num">Missing</th><th>Flags</th></tr></thead><tbody>';
     for (const r of rows) {
       const c = r.c;
       html += `<tr>
@@ -658,6 +712,8 @@
         <td><input type="text" data-key="${esc(c.key)}" data-field="id" value="${esc(c.id)}"></td>
         <td class="muted">${esc(c.key)}</td>
         <td>${esc(c.well || '')}</td>
+        <td><input type="text" data-key="${esc(c.key)}" data-field="experiment" value="${esc(c.experiment || c.file || '')}"></td>
+        <td><input type="text" data-key="${esc(c.key)}" data-field="replicate" value="${esc(c.replicate || '')}"></td>
         <td><input type="text" data-key="${esc(c.key)}" data-field="genotype" value="${esc(c.genotype || '')}"></td>
         <td><input type="text" data-key="${esc(c.key)}" data-field="group" value="${esc(c.group || 'All')}"></td>
         <td><input type="text" data-key="${esc(c.key)}" data-field="sex" value="${esc(c.sex || '')}"></td>
@@ -835,6 +891,12 @@
     I.addCircadianTime(reg, state.settings);
     state.dataset = reg;
     state.animals = [];
+    state.fullAnimals = [];
+    state.fullSummaries = [];
+    state.fullCircadian = [];
+    state.fullPhaseRows = [];
+    state.scope = { experiments: null, replicates: null };
+    updateScopeCount();
     state.configs = demo.configs.map((c, i) => ({ ...c, file: 'Synthetic demo', channel: i + 1 }));
     if (state.metadata) linkMetadata({ notify: false }); else renderAnimalTable();
     $('parser-card').classList.add('hidden');
@@ -850,6 +912,11 @@
     readSettingsUI();
     state.animals = I.assembleAnimals(state.dataset, state.configs, state.settings);
     if (!state.animals.length) throw new Error('No animals are included. Tick at least one animal in the table.');
+    state.fullAnimals = [];
+    state.fullSummaries = [];
+    state.fullCircadian = [];
+    state.fullPhaseRows = [];
+    state.scope = { experiments: null, replicates: null };
     state.phaseMap = I.dayPhaseMap(state.animals);
     const allDays = state.animals.flatMap((a) => a.day).filter(C.isNum);
     const maxDay = C.max(allDays);
@@ -866,9 +933,10 @@
     if (!state.animals.length) throw new Error('No animals to analyse.');
     setBusy(true, 'Computing metrics…');
     const summaries = [], circs = [], phases = [];
-    const n = state.animals.length;
+    const allAnimals = state.fullAnimals.length ? state.fullAnimals.slice() : state.animals.slice();
+    const n = allAnimals.length;
     for (let i = 0; i < n; i++) {
-      const a = state.animals[i];
+      const a = allAnimals[i];
       try {
         const sum = SL.summarizeAnimal(a, state.settings, state.phaseMap);
         const cr = CL.analyseAnimal(a, state.settings, state.phaseMap);
@@ -888,10 +956,11 @@
         await sleep(0);
       }
     }
-    state.summaries = summaries;
-    state.circadian = circs;
-    state.phaseRows = phases;
-    buildMetricRows();
+    state.fullAnimals = allAnimals;
+    state.fullSummaries = summaries;
+    state.fullCircadian = circs;
+    state.fullPhaseRows = phases;
+    applyScope();
     state.dirty = { overview: true, actograms: true, profiles: true, sleep: true, circadian: true, phase: true, stats: true };
     populateGroupSelects();
     populateStatsMetrics();
@@ -907,26 +976,29 @@
     if (!state.animals.length) throw new Error('Build a dataset first.');
     state.settings.primaryMethod = $('circ-primary').value || state.settings.primaryMethod;
     setBusy(true, 'Recomputing periodograms…');
-    state.circadian = [];
-    state.phaseRows = [];
-    for (let i = 0; i < state.animals.length; i++) {
-      const a = state.animals[i];
+    const allAnimals = state.fullAnimals.length ? state.fullAnimals.slice() : state.animals.slice();
+    const circs = [], phases = [];
+    for (let i = 0; i < allAnimals.length; i++) {
+      const a = allAnimals[i];
       try {
         const cr = CL.analyseAnimal(a, state.settings, state.phaseMap);
-        state.circadian.push(cr);
+        circs.push(cr);
         const ph = PL.phaseMetrics(a, state.settings, state.phaseMap, cr);
         ph.animal = a;
-        state.phaseRows.push(ph);
+        phases.push(ph);
       } catch (e) {
         console.error('Circadian recompute failed:', a.id, e);
-        state.circadian.push({ animal: a, error: e.message, tau: NaN, rhythmic: false });
-        state.phaseRows.push({ animal: a, IS: NaN, IV: NaN, RA: NaN, COG: NaN, MAI: NaN, EAI: NaN });
+        circs.push({ animal: a, error: e.message, tau: NaN, rhythmic: false });
+        phases.push({ animal: a, IS: NaN, IV: NaN, RA: NaN, COG: NaN, MAI: NaN, EAI: NaN });
       }
       if (i % 4 === 0) await sleep(0);
     }
+    state.fullAnimals = allAnimals;
+    state.fullCircadian = circs;
+    state.fullPhaseRows = phases;
+    applyScope();
     state.dirty.circadian = true;
     state.dirty.phase = true;
-    buildMetricRows();
     syncSettingsUI();
     renderCircadian();
     setBusy(false);
@@ -980,6 +1052,88 @@
         dayNightRatio: ph.dayNightRatio
       };
     });
+  }
+
+  /* ============================ experiment / replicate scope ============================ */
+  function experimentLabel(animal) {
+    return String(animal.experiment || 'Unspecified experiment');
+  }
+  function replicateLabel(animal) {
+    return String(animal.replicate || 'Unspecified replicate');
+  }
+  function scopeValues(key) {
+    const all = state.fullAnimals.length ? state.fullAnimals : state.animals;
+    return C.unique(all.map((a) => key === 'experiment' ? experimentLabel(a) : replicateLabel(a))).sort();
+  }
+  function scopeChips(id, values, selected, kind) {
+    const wrap = $(id);
+    if (!wrap) return;
+    wrap.innerHTML = values.map((v) => {
+      const checked = !selected || selected.has(v);
+      return `<label class="scope-chip"><input type="checkbox" data-scope-kind="${kind}" data-scope-value="${esc(v)}" ${checked ? 'checked' : ''}>${esc(v)}</label>`;
+    }).join('');
+  }
+  function updateScopeCount() {
+    const all = state.fullAnimals.length ? state.fullAnimals : state.animals;
+    const el = $('scope-count');
+    if (el) el.textContent = all.length ? `${state.animals.length} of ${all.length} animals` : '';
+    const strip = $('scope-strip');
+    if (strip) strip.classList.toggle('hidden', !all.length);
+  }
+  function populateScopeControls() {
+    const all = state.fullAnimals.length ? state.fullAnimals : state.animals;
+    const exps = scopeValues('experiment');
+    const reps = scopeValues('replicate');
+    const expGroup = $('scope-exp-group');
+    const repGroup = $('scope-rep-group');
+    if (expGroup) expGroup.classList.toggle('hidden', exps.length < 2);
+    if (repGroup) repGroup.classList.toggle('hidden', reps.length < 2);
+    scopeChips('scope-experiment-chips', exps, state.scope.experiments, 'experiments');
+    scopeChips('scope-replicate-chips', reps, state.scope.replicates, 'replicates');
+    updateScopeCount();
+    const strip = $('scope-strip');
+    if (strip) strip.classList.toggle('hidden', !all.length || (exps.length < 2 && reps.length < 2));
+  }
+  function applyScope() {
+    const all = state.fullAnimals.length ? state.fullAnimals : state.animals;
+    if (!all.length) { updateScopeCount(); return; }
+    if (!state.fullAnimals.length) {
+      state.fullAnimals = all.slice();
+      state.fullSummaries = state.summaries.slice();
+      state.fullCircadian = state.circadian.slice();
+      state.fullPhaseRows = state.phaseRows.slice();
+    }
+    const expSet = state.scope.experiments;
+    const repSet = state.scope.replicates;
+    const idx = [];
+    for (let i = 0; i < state.fullAnimals.length; i++) {
+      const a = state.fullAnimals[i];
+      if (expSet && !expSet.has(experimentLabel(a))) continue;
+      if (repSet && !repSet.has(replicateLabel(a))) continue;
+      idx.push(i);
+    }
+    state.animals = idx.map((i) => state.fullAnimals[i]);
+    state.summaries = idx.map((i) => state.fullSummaries[i]).filter(Boolean);
+    state.circadian = idx.map((i) => state.fullCircadian[i]).filter(Boolean);
+    state.phaseRows = idx.map((i) => state.fullPhaseRows[i]).filter(Boolean);
+    buildMetricRows();
+    populateScopeControls();
+  }
+  function onScopeChange() {
+    const expChecks = $$('#scope-experiment-chips input:checked').map((i) => i.dataset.scopeValue);
+    const repChecks = $$('#scope-replicate-chips input:checked').map((i) => i.dataset.scopeValue);
+    const exps = scopeValues('experiment');
+    const reps = scopeValues('replicate');
+    if (!expChecks.length && exps.length) { toast('Select at least one experiment.', 'error'); populateScopeControls(); return; }
+    if (!repChecks.length && reps.length) { toast('Select at least one replicate.', 'error'); populateScopeControls(); return; }
+    state.scope.experiments = expChecks.length === exps.length ? null : new Set(expChecks);
+    state.scope.replicates = repChecks.length === reps.length ? null : new Set(repChecks);
+    applyScope();
+    state.dirty = { overview: true, actograms: true, profiles: true, sleep: true, circadian: true, phase: true, stats: true };
+    populateGroupSelects();
+    populateStatsMetrics();
+    populateProfileTestGroups();
+    setSection(state.section, { silent: true, instant: true });
   }
 
   function populateGroupSelects() {
@@ -1621,8 +1775,15 @@
         total: state.metadataStats ? state.metadataStats.total : null
       } : null,
       animals: state.animals.length,
+      totalAnimals: state.fullAnimals.length || state.animals.length,
       groups: C.unique(state.animals.map((a) => a.group)),
       genotypes: C.unique(state.animals.map((a) => a.genotype).filter(Boolean)),
+      experiments: C.unique(state.animals.map((a) => a.experiment).filter(Boolean)),
+      replicates: C.unique(state.animals.map((a) => a.replicate).filter(Boolean)),
+      scope: {
+        experiments: state.scope.experiments ? [...state.scope.experiments] : 'all',
+        replicates: state.scope.replicates ? [...state.scope.replicates] : 'all'
+      },
       settings: state.settings,
       references: [
         'Sokolove & Bushell 1978', 'Lomb 1976', 'Scargle 1982', 'Levine et al. 2002',
@@ -1710,7 +1871,7 @@
       pre{background:#f4f1ea;padding:14px;font-size:10px;overflow:auto}footer{margin-top:40px;color:#68737d;font-size:11px}
       </style></head><body>
       <h1>Chronobiology Workbench report</h1>
-      <p class="meta">Generated ${new Date().toLocaleString()} · ${state.animals.length} animals · ${groups.length} groups · ${state.settings.binMin}-min bins</p>
+      <p class="meta">Generated ${new Date().toLocaleString()} · ${state.animals.length} of ${state.fullAnimals.length || state.animals.length} animals · ${groups.length} groups · ${state.settings.binMin}-min bins · scope: ${state.scope.experiments ? [...state.scope.experiments].join(', ') : 'all experiments'} / ${state.scope.replicates ? [...state.scope.replicates].join(', ') : 'all replicates'}</p>
       <h2>Group summary</h2>
       <table><thead><tr><th>Group</th><th>n</th><th>Sleep/day (min)</th><th>Bouts/day</th><th>τ (h)</th><th>% rhythmic</th><th>MAI</th><th>EAI</th></tr></thead><tbody>${summaryRows}</tbody></table>
       ${figures.profile ? `<h2>24-hour activity profile</h2><img src="${figures.profile}" alt="Activity profile">` : ''}
@@ -1759,6 +1920,8 @@
       state.dataset = reg;
       if (state.animals.length) {
         state.animals = I.assembleAnimals(reg, state.configs, state.settings);
+        state.fullAnimals = []; state.fullSummaries = []; state.fullCircadian = []; state.fullPhaseRows = [];
+        state.scope = { experiments: null, replicates: null };
         state.phaseMap = I.dayPhaseMap(state.animals);
         await runAll();
       } else {

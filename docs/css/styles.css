@@ -444,6 +444,23 @@ td input, td select { font-family: var(--font-body); }
 .toast.info { border-left: 4px solid #111111; }
 .status-dot.ready { background: var(--okabe-green); box-shadow: 0 0 0 3px rgba(0,158,115,0.14); }
 .progress > i { background: #111111; }
+.scope-strip {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 9px 32px; border-bottom: 1px solid hsl(var(--border));
+  background: #FAFAF8; font-family: var(--font-label);
+}
+.scope-label { font-size: 9px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: #555555; }
+.scope-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.scope-sublabel { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: #777777; }
+.scope-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.scope-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px;
+  border: 1px solid rgba(17,17,17,0.18); background: #FFFFFF; color: #222222;
+  font-family: var(--font-body); font-size: 11px; letter-spacing: 0; text-transform: none;
+  cursor: pointer; white-space: nowrap;
+}
+.scope-chip input { accent-color: var(--accent-red); width: 12px; height: 12px; }
+.scope-count { margin-left: auto; font-family: var(--font-label); font-size: 10px; color: #666666; }
 .chart { min-height: 500px; }
 .chart.tall { min-height: 560px; }
 .theme-toggle { font-family: var(--font-label); }
@@ -477,6 +494,9 @@ body.dark {
   --paper-border: rgba(255,255,255,0.16);
 }
 body.dark .topbar { background: rgba(13,13,13,0.93); }
+body.dark .scope-strip { background: #101010; border-color: rgba(255,255,255,0.14); }
+body.dark .scope-label, body.dark .scope-sublabel, body.dark .scope-count { color: #A8A8A8; }
+body.dark .scope-chip { background: #111111; color: #DEDEDE; border-color: rgba(255,255,255,0.2); }
 body.dark .stepper { background: rgba(13,13,13,0.95); }
 body.dark .monogram { background: #F5F5F5; color: #111111; border-color: #F5F5F5; }
 body.dark .card { background: #101010; border-color: rgba(255,255,255,0.16); }
@@ -535,6 +555,8 @@ body.dark .progress > i { background: #F5F5F5; }
 @media (max-width: 700px) {
   .topbar { padding: 12px 18px; }
   .stepper { padding: 8px 18px; top: 65px; }
+  .scope-strip { padding: 8px 18px; gap: 8px; }
+  .scope-count { width: 100%; margin-left: 0; }
   .page { padding: 32px 18px 72px; }
   .topbar-right .dataset-status { display: none; }
   .hero { padding-top: 10px; }

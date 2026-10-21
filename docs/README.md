@@ -49,7 +49,7 @@ A workflow is included at `.github/workflows/pages.yml`. Set **Settings → Page
 
 | Section | Analysis |
 |---|---|
-| **01 Import** | DAM (24/32 channels, multiple monitors), Zantiks MWP, generic CSV/TSV/Excel (wide or long), ethoscope SQLite/CSV. Animal table, automatic metadata join (including genotype), QC flags and group assignment. |
+| **01 Import** | DAM (24/32 channels, multiple monitors), Zantiks MWP, generic CSV/TSV/Excel (wide or long), ethoscope SQLite/CSV. Multiple behavioural files can be uploaded together; animal table, automatic metadata join (including genotype, experiment and replicate), QC flags and group assignment. |
 | **02 Settings** | Analysis bin, cycle length, ZT0, phase window, sleep thresholds, dead/missing rules, period search range, rhythmic criteria, anticipation/onset parameters, rebound windows, display options. |
 | **03 Overview** | KPIs, group summary, recording timeline, activity profile, QC table. |
 | **04 Actograms** | Individual and group-average single/double-plotted bar actograms; dark-phase shading, period line, sleep actogram, custom binning and scaling. |
@@ -88,6 +88,10 @@ Quoted CSV with `RUNTIME`, `UNIT`, `TEMPERATURE`, `L_OR_D`, `DAY`, `HOUR`, `TIME
 ### Metadata
 
 Upload a CSV with one row per animal. The app automatically detects and links metadata by **file/monitor**, **channel/well/ROI** or **animal ID**. Genotype is carried through to the animal table, exports, group summaries and the statistics grouping menu; group, sex and treatment are linked at the same time. If a metadata file has a genotype but no separate group, genotype becomes the grouping variable.
+
+Use the `exp` column to name an experiment and `replicate` to name a replicate. If `exp` is blank, the source filename is used as the experiment label. Multiple files may be selected together in **Upload data**; they are combined into one analysis table when they share the same bin size and start clock. Different experiment dates and durations are supported, and missing tails are padded with missing values.
+
+The **Data scope** bar below the navigation lets you tick any combination of experiments and replicates. Leaving all boxes ticked combines everything; untick an outlier experiment or replicate to exclude it from every graph and statistic. The scope is recorded in the manifest. The animal table also shows editable **Experiment** and **Replicate** columns.
 
 A typical file can use the lab format:
 
