@@ -502,13 +502,14 @@
   const downloadText = (text, filename, mime) => downloadBlob(new Blob([text], { type: mime || 'text/plain;charset=utf-8' }), filename);
 
   /* ============================ palette ============================ */
+  // Okabe–Ito: colour-blind-safe categorical palette.
   const palette = [
-    '#3F6078', '#A45A52', '#5E8C61', '#8A6FA8',
-    '#B08D57', '#4F8A8B', '#7A6A5A', '#C17C74',
-    '#6C7A89', '#7D8F5A', '#9B6A8F', '#4E7F9E'
+    '#0072B2', '#D55E00', '#009E73', '#CC79A7',
+    '#E69F00', '#56B4E9', '#F0E442', '#000000',
+    '#999999', '#44AA99', '#882255', '#DDCC77'
   ];
-  const paletteNames = ['slate', 'terracotta', 'sage', 'mauve', 'ochre', 'teal', 'umber', 'rose',
-    'steel', 'olive', 'plum', 'denim'];
+  const paletteNames = ['blue', 'vermillion', 'green', 'purple', 'orange', 'sky',
+    'yellow', 'black', 'grey', 'teal', 'wine', 'sand'];
   const groupColor = (i) => palette[i % palette.length];
 
   /* ============================ misc ============================ */

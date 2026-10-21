@@ -986,6 +986,10 @@
         genotype: cfg.genotype || '',
         sex: cfg.sex || '',
         treatment: cfg.treatment || '',
+        replicate: cfg.replicate || '',
+        experiment: cfg.experiment || '',
+        startDateTime: cfg.startDateTime || null,
+        stopDateTime: cfg.stopDateTime || null,
         condition: cfg.condition || '',
         metadata: cfg.metadata || {},
         include: true,
@@ -1133,7 +1137,11 @@
         group: find([/^group$/, /experimental.?group/, /cohort/, /condition/, /treatment/]) || genotype,
         sex: find([/sex/, /gender/]),
         treatment: find([/treatment/, /condition/, /drug/, /diet/]),
-        well: find([/well/, /roi/, /region/])
+        well: find([/well/, /arena/, /chamber/]),
+        replicate: find([/replicate/, /^rep$/, /block/]),
+        experiment: find([/^exp$/, /experiment/]),
+        start: find([/start.?datetime/, /start.?time/, /^start$/]),
+        stop: find([/stop.?datetime/, /stop.?time/, /^stop$/])
       }
     };
   }
@@ -1147,7 +1155,12 @@
       group: s.group || null,
       genotype: s.genotype || null,
       sex: s.sex || null,
-      treatment: s.treatment || null
+      treatment: s.treatment || null,
+      well: s.well || null,
+      replicate: s.replicate || null,
+      experiment: s.experiment || null,
+      start: s.start || null,
+      stop: s.stop || null
     };
   }
 
@@ -1158,35 +1171,50 @@
     if (!meta || !mapping) return configs;
     const rows = meta.rows;
     const norm = (v) => String(v ?? '').trim().toLowerCase();
+    const clean = (v) => {
+      const s = String(v ?? '').trim();
+      return /^(na|n\/a|null|none|\.|-)$/i.test(s) ? '' : s;
+    };
     const normFile = (v) => norm(v).replace(/\.[a-z0-9]+$/, '');
-    let matched = 0;
+    let matched = 0, genotyped = 0;
     const matchedRows = new Set();
     for (const cfg of configs) {
       let hit = null;
       for (const r of rows) {
         const idVal = mapping.id ? norm(r[mapping.id]) : '';
         const chVal = mapping.channel ? norm(r[mapping.channel]) : '';
+        const wellVal = mapping.well ? norm(r[mapping.well]) : '';
         const fileVal = mapping.file ? norm(r[mapping.file]) : '';
         const cfgCh = norm(cfg.channel ?? cfg.well ?? cfg.key);
         const cfgFile = norm(cfg.file ?? '');
         const idMatch = idVal && (idVal === norm(cfg.id) || idVal === norm(cfg.key) || idVal === norm(cfg.well));
         const chMatch = chVal && (chVal === cfgCh || chVal === norm(cfg.well) || chVal.replace(/^ch/, '') === cfgCh.replace(/^ch/, ''));
+        const wellMatch = wellVal && wellVal === norm(cfg.well);
         const fileMatch = !mapping.file || !fileVal || fileVal === cfgFile || normFile(fileVal) === normFile(cfgFile);
-        if ((idMatch || (chMatch && fileMatch))) { hit = r; break; }
+        if ((idMatch || ((chMatch || wellMatch) && fileMatch))) { hit = r; break; }
       }
       if (!hit) continue;
       matched++;
       matchedRows.add(hit);
-      if (mapping.genotype && hit[mapping.genotype]) cfg.genotype = hit[mapping.genotype];
-      if (mapping.group && hit[mapping.group]) cfg.group = hit[mapping.group];
+      const genotype = mapping.genotype && hit[mapping.genotype] ? clean(hit[mapping.genotype]) : '';
+      if (genotype) cfg.genotype = genotype;
+      if (mapping.group && clean(hit[mapping.group])) cfg.group = clean(hit[mapping.group]);
       // If the metadata only supplies a genotype, use it as the grouping key
       // so every downstream analysis automatically groups by genotype.
-      if (!cfg.genotype && mapping.group && hit[mapping.group] && /genotype|strain|allele|line/i.test(mapping.group)) {
-        cfg.genotype = hit[mapping.group];
+      if (!cfg.genotype && mapping.group && /genotype|strain|allele|line/i.test(mapping.group)) {
+        cfg.genotype = clean(hit[mapping.group]);
       }
       if ((!cfg.group || cfg.group === 'All') && cfg.genotype) cfg.group = cfg.genotype;
-      if (mapping.sex && hit[mapping.sex]) cfg.sex = hit[mapping.sex];
-      if (mapping.treatment && hit[mapping.treatment]) cfg.treatment = hit[mapping.treatment];
+      if (mapping.sex && clean(hit[mapping.sex])) cfg.sex = clean(hit[mapping.sex]);
+      if (mapping.treatment && clean(hit[mapping.treatment])) cfg.treatment = clean(hit[mapping.treatment]);
+      if (mapping.well && clean(hit[mapping.well])) cfg.well = clean(hit[mapping.well]);
+      if (mapping.replicate && clean(hit[mapping.replicate])) cfg.replicate = clean(hit[mapping.replicate]);
+      if (mapping.experiment && clean(hit[mapping.experiment])) cfg.experiment = clean(hit[mapping.experiment]);
+      const startCol = mapping.start || (meta.suggested && meta.suggested.start);
+      const stopCol = mapping.stop || (meta.suggested && meta.suggested.stop);
+      if (startCol && clean(hit[startCol])) cfg.startDateTime = clean(hit[startCol]);
+      if (stopCol && clean(hit[stopCol])) cfg.stopDateTime = clean(hit[stopCol]);
+      if (cfg.genotype) genotyped++;
       cfg.metadata = Object.assign({}, cfg.metadata, hit);
       cfg.include = !/dead|exclude|no/i.test(hit.observations || '') || /alive/i.test(hit.observations || '');
     }
@@ -1195,7 +1223,9 @@
       total: configs.length,
       metadataRows: rows.length,
       matchedRows: matchedRows.size,
-      unmatched: configs.length - matched
+      unmatched: configs.length - matched,
+      genotyped,
+      missingGenotype: matched - genotyped
     };
     return configs;
   }

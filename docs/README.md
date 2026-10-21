@@ -87,7 +87,14 @@ Quoted CSV with `RUNTIME`, `UNIT`, `TEMPERATURE`, `L_OR_D`, `DAY`, `HOUR`, `TIME
 
 Upload a CSV with one row per animal. The app automatically detects and links metadata by **file/monitor**, **channel/well/ROI** or **animal ID**. Genotype is carried through to the animal table, exports, group summaries and the statistics grouping menu; group, sex and treatment are linked at the same time. If a metadata file has a genotype but no separate group, genotype becomes the grouping variable.
 
-The minimum useful columns are a join key (`file`, `channel` or `animal_id`) plus `genotype`. Other columns are retained in the manifest. Use the mapping controls to correct a join or add an experimental group; the match count is shown immediately. Metadata can be uploaded before or after the behavioural files and is applied automatically when the dataset is used. You can also edit genotype, group, sex and treatment directly in the animal table.
+A typical file can use the lab format:
+
+```csv
+file,start_datetime,stop_datetime,region_id,sex,genotype,replicate,well,exp,observations
+DAM-like.txt,2026-10-08 08:00:00,2026-10-17 08:00:00,1,male,CTRL-7D,,A1,,
+```
+
+`region_id` is used as the channel/well join key; `well` supplies the arena label; and `start_datetime` / `stop_datetime`, `replicate` and `exp` are preserved on the animal record and in the manifest. Values of `NA`, `N/A`, `none` and `.` are treated as missing. The minimum useful columns are a join key (`file`, `region_id`/`channel`, `well` or `animal_id`) plus `genotype`. Use the mapping controls to correct a join or add an experimental group; the match count and any missing genotypes are shown immediately. Metadata can be uploaded before or after the behavioural files and is applied automatically when the dataset is used. You can also edit genotype, group, sex and treatment directly in the animal table.
 
 ---
 
@@ -98,6 +105,7 @@ The minimum useful columns are a join key (`file`, `channel` or `animal_id`) plu
 - Chi-square power is \(Q_p - Q_p^{threshold}\). The strict rhythmic flag requires power ≥ 10 and peak width ≥ 2 h; the significant-peak column is reported separately.
 - The full formulas, parameters, defaults and references are in [`METHODS.md`](METHODS.md).
 - The application is a research tool, not a validated clinical device. Verify thresholds and methods against the original references before publication.
+- The interface follows the Ethogram visual language: a black-and-white scientific surface, Bricolage Grotesque labels, Source Serif 4 body text, red for the current selection and Okabe–Ito colours for data categories.
 
 ---
 

@@ -8,22 +8,27 @@
   const I = global.Importers;
 
   const THEME = {
-    paper: '#F7F4EE',
-    ink: '#3C4652',
-    muted: '#6C7A89',
-    grid: 'rgba(91,107,122,0.16)',
-    axis: 'rgba(91,107,122,0.45)',
-    bar: '#3F6078',
-    sleep: '#4F8A8B',
-    wake: '#B08D57',
-    dark: 'rgba(60,70,82,0.13)',
-    missing: '#D6CFC2',
-    accent: '#A45A52',
-    green: '#5E8C61'
+    paper: '#FFFFFF',
+    ink: '#111111',
+    muted: '#666666',
+    grid: 'rgba(17,17,17,0.08)',
+    axis: 'rgba(17,17,17,0.32)',
+    bar: '#111111',
+    sleep: '#56B4E9',
+    wake: '#E69F00',
+    dark: 'rgba(17,17,17,0.07)',
+    missing: '#D9D9D9',
+    accent: '#C1121F',
+    green: '#009E73',
+    blue: '#0072B2',
+    orange: '#E69F00',
+    vermillion: '#D55E00',
+    purple: '#CC79A7',
+    sky: '#56B4E9'
   };
-  const MONO = 'DM Mono, ui-monospace, monospace';
-  const SERIF = 'Playfair Display, Georgia, serif';
-  const SANS = 'Inter, system-ui, sans-serif';
+  const MONO = 'Bricolage Grotesque, Helvetica Neue, Arial, sans-serif';
+  const SERIF = 'Bricolage Grotesque, Helvetica Neue, Arial, sans-serif';
+  const SANS = 'Source Serif 4, Georgia, serif';
   const CONFIG = { displayModeBar: true, responsive: true, modeBarButtonsToRemove: ['lasso2d', 'select2d'], displaylogo: false };
 
   function baseLayout(title, opts = {}) {
@@ -48,7 +53,7 @@
         title: { font: { family: MONO, size: 11, color: THEME.muted } }
       },
       legend: { orientation: 'h', y: -0.18, x: 0, font: { family: MONO, size: 10, color: THEME.ink }, bgcolor: 'rgba(0,0,0,0)' },
-      hoverlabel: { bgcolor: '#3C4652', bordercolor: '#3C4652', font: { family: SANS, color: '#F7F4EE' } },
+      hoverlabel: { bgcolor: '#111111', bordercolor: '#111111', font: { family: SANS, color: '#FFFFFF' } },
       showlegend: opts.showlegend !== false
     };
     return layout;
@@ -242,9 +247,9 @@
   function sleepCategoryChart(el, categoriesByHour, opts = {}) {
     const hours = categoriesByHour.hours;
     const traces = [
-      { x: hours, y: categoriesByHour.short, name: 'Short (≤30 min)', type: 'bar', marker: { color: '#C17C74' } },
+      { x: hours, y: categoriesByHour.short, name: 'Short (≤30 min)', type: 'bar', marker: { color: THEME.orange } },
       { x: hours, y: categoriesByHour.intermediate, name: 'Intermediate (30–60)', type: 'bar', marker: { color: THEME.green } },
-      { x: hours, y: categoriesByHour.long, name: 'Long (>60)', type: 'bar', marker: { color: THEME.bar } }
+      { x: hours, y: categoriesByHour.long, name: 'Long (>60)', type: 'bar', marker: { color: THEME.blue } }
     ];
     const layout = baseLayout(opts.title || '', { showlegend: true });
     layout.barmode = 'stack';
@@ -347,7 +352,7 @@
     }
     return {
       type: 'scatter', mode: 'lines', x: xs, y: ys,
-      line: { color: color || '#3C4652', width: opts.barWidth || 2.2 },
+      line: { color: color || THEME.bar, width: opts.barWidth || 2.2 },
       hoverinfo: 'skip', showlegend: false
     };
   }
@@ -430,7 +435,7 @@
     const matrix = actogramMatrix(animal, { ...opts, binMin });
     let cmax = opts.cmax;
     if (!C.isNum(cmax)) cmax = actogramScaling([animal], { ...opts, binMin, scaleMode: opts.scaleMode || 'percentile' });
-    const trace = barActogramTrace(matrix, cmax, double, opts.color || '#3C4652', opts);
+    const trace = barActogramTrace(matrix, cmax, double, opts.color || THEME.bar, opts);
     const layout = actogramLayout(opts.title || `${animal.id}${animal.group ? ' · ' + animal.group : ''}`, matrix, double, opts);
     layout.shapes = actogramShapes(matrix, double, opts);
     const traces = [trace];
@@ -487,7 +492,7 @@
     const vals = meanZ.flat().filter((v) => v > 0).sort((a, b) => a - b);
     let cmax = opts.cmax;
     if (!C.isNum(cmax)) cmax = vals.length ? vals[Math.min(vals.length - 1, Math.floor(0.99 * vals.length))] : 1;
-    const trace = barActogramTrace(matrix, cmax, double, opts.color || '#3C4652', opts);
+    const trace = barActogramTrace(matrix, cmax, double, opts.color || THEME.bar, opts);
     const layout = actogramLayout(opts.title || `Average actogram (n=${animals.length})`, matrix, double, opts);
     layout.shapes = actogramShapes(matrix, double, opts);
     plot(el, [trace], layout, { displayModeBar: false, responsive: true });
@@ -527,7 +532,7 @@
     const y = rows.map((r) => r.id);
     const trace = {
       type: 'heatmap', z, x: raster.times, y,
-      colorscale: [[0, '#F7F4EE'], [1, THEME.sleep]],
+      colorscale: [[0, '#FFFFFF'], [1, THEME.sleep]],
       zmin: 0, zmax: 1, showscale: false,
       hovertemplate: '%{y}<br>%{x:.2f} h<br>state %{z}<extra></extra>'
     };
