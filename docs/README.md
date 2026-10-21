@@ -60,6 +60,8 @@ A workflow is included at `.github/workflows/pages.yml`. Set **Settings → Page
 | **09 Statistics** | Shapiro–Wilk, Welch/Student t, Mann–Whitney, ANOVA, Kruskal–Wallis, Dunn, pairwise corrected tests, Fisher exact/chi-square, Cohen's d and rank-biserial effect sizes, profile permutation tests. |
 | **10 Export** | Tidy CSVs (`animals_summary`, `time_series`, `bouts`, `periodograms`, `profiles`, `group_stats`, `phase_metrics`), figures PNG/SVG, HTML report, print-to-PDF and a ZIP package with `manifest.json`. |
 
+Use the **Dark / Light** button in the header to switch theme; the choice is remembered in the browser. Charts use a near-square canvas and the vibrant Okabe–Ito-derived palette, with legends above the overview timeline and activity profile.
+
 ---
 
 ## Supported input formats

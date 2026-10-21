@@ -7,25 +7,41 @@
   const C = global.Core;
   const I = global.Importers;
 
-  const THEME = {
+  const LIGHT_THEME = {
     paper: '#FFFFFF',
     ink: '#111111',
     muted: '#666666',
     grid: 'rgba(17,17,17,0.08)',
     axis: 'rgba(17,17,17,0.32)',
     bar: '#111111',
-    sleep: '#56B4E9',
-    wake: '#E69F00',
+    sleep: '#00B8E6',
+    wake: '#FFC400',
     dark: 'rgba(17,17,17,0.07)',
     missing: '#D9D9D9',
     accent: '#C1121F',
-    green: '#009E73',
-    blue: '#0072B2',
-    orange: '#E69F00',
-    vermillion: '#D55E00',
-    purple: '#CC79A7',
-    sky: '#56B4E9'
+    green: '#00B86B',
+    blue: '#0066FF',
+    orange: '#FF8A00',
+    vermillion: '#E6194B',
+    purple: '#B23AFF',
+    sky: '#00B8E6'
   };
+  const DARK_THEME = Object.assign({}, LIGHT_THEME, {
+    paper: '#0D0D0D',
+    ink: '#F5F5F5',
+    muted: '#A8A8A8',
+    grid: 'rgba(255,255,255,0.12)',
+    axis: 'rgba(255,255,255,0.38)',
+    bar: '#F5F5F5',
+    dark: 'rgba(255,255,255,0.08)',
+    missing: '#555555',
+    accent: '#FF4D6D'
+  });
+  const THEME = Object.assign({}, LIGHT_THEME);
+  function setTheme(mode) {
+    Object.assign(THEME, mode === 'dark' ? DARK_THEME : LIGHT_THEME);
+    return THEME;
+  }
   const MONO = 'Bricolage Grotesque, Helvetica Neue, Arial, sans-serif';
   const SERIF = 'Bricolage Grotesque, Helvetica Neue, Arial, sans-serif';
   const SANS = 'Source Serif 4, Georgia, serif';
@@ -41,6 +57,7 @@
       paper_bgcolor: THEME.paper,
       plot_bgcolor: THEME.paper,
       font: { family: SANS, size: 12, color: THEME.ink },
+      height: opts.height || 500,
       margin: { l: 68, r: 28, t: title ? 58 : 26, b: 58 },
       xaxis: {
         gridcolor: THEME.grid, zerolinecolor: THEME.axis, linecolor: THEME.axis,
@@ -61,8 +78,17 @@
 
   function plot(el, data, layout, config) {
     if (!el) return;
-    if (el._fullLayout) Plotly.react(el, data, layout, config || CONFIG);
-    else Plotly.newPlot(el, data, layout, config || CONFIG);
+    layout.autosize = true;
+    const done = el._fullLayout
+      ? Plotly.react(el, data, layout, config || CONFIG)
+      : Plotly.newPlot(el, data, layout, config || CONFIG);
+    // Plotly defaults to a 700 px canvas when a figure is first created. Resize
+    // to the card after the DOM has laid it out so axes and legends never clip.
+    Promise.resolve(done).then(() => {
+      if (el.clientWidth > 0 && typeof Plotly.Plots.resize === 'function') {
+        try { Plotly.Plots.resize(el); } catch (e) { /* noop */ }
+      }
+    }).catch(() => {});
   }
 
   function clear(el, message) {
@@ -179,6 +205,10 @@
     layout.bargroupgap = 0.02;
     if (isSleep && !opts.yTitle) layout.yaxis.range = [0, Math.max(1, ...groups.flatMap((g) => g.mean.filter(C.isNum))) * 1.15];
     if (opts.shapes) layout.shapes = opts.shapes;
+    if (opts.legend) {
+      layout.legend = Object.assign({}, layout.legend, opts.legend);
+      layout.margin.t = Math.max(layout.margin.t, 56);
+    }
     plot(el, traces, layout);
   }
 
@@ -268,8 +298,8 @@
         type: 'scatterpolar', mode: 'lines', name: g.group,
         r: g.mean.concat([g.mean[0]]),
         theta: theta.concat([theta[0] + 360]),
-        line: { color: col, width: 2 },
-        fill: 'toself', fillcolor: col, opacity: 0.12,
+        line: { color: col, width: 3 },
+        fill: 'toself', fillcolor: col, opacity: 0.24,
         hovertemplate: `${g.group}<br>%{theta:.0f}°<br>%{r:.2f}<extra></extra>`
       };
     });
@@ -729,9 +759,14 @@
       traces.push({ x, y: s.mean.map((v, i) => C.isNum(v) && C.isNum(s.sem[i]) ? v - s.sem[i] : null), mode: 'lines', line: { width: 0 }, fill: 'tonexty', fillcolor: col, opacity: 0.1, hoverinfo: 'skip', showlegend: false });
     });
     const layout = baseLayout(opts.title || '', { showlegend: true });
-    layout.xaxis.title.text = 'Days from recording start';
-    layout.yaxis.title.text = 'Activity (counts/bin)';
+    layout.xaxis.title.text = opts.xTitle || 'Days from recording start';
+    layout.yaxis.title.text = opts.yTitle || 'Mean activity (counts/bin)';
+    layout.xaxis.tickformat = '.0f';
     if (opts.shapes) layout.shapes = opts.shapes;
+    if (opts.legend) {
+      layout.legend = Object.assign({}, layout.legend, opts.legend);
+      layout.margin.t = Math.max(layout.margin.t, 56);
+    }
     plot(el, traces, layout);
   }
 
@@ -892,6 +927,6 @@
     rasterChart, periodogramChart, periodDistributionChart, autocorrelationChart,
     boxPlot, barSummaryChart, timelineChart, histogramChart, multiBoxPlot,
     populationChart, profileComparisonChart,
-    figureToDataURL, exportFigure, resizeAll, periodogramSeries, describeGroups
+    figureToDataURL, exportFigure, resizeAll, periodogramSeries, describeGroups, setTheme
   };
 })(window);

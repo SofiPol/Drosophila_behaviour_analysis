@@ -46,6 +46,7 @@
     validation: null,
     properties: null,
     settings: null,
+    theme: 'light',
     busy: false,
     section: 'import',
     actogramPage: 0,
@@ -204,7 +205,27 @@
   function setBusy(isBusy, text) {
     state.busy = isBusy;
     if (text) setStatus(text, false);
-    $$('button').forEach((b) => { if (b.id !== 'btn-help') b.disabled = isBusy; });
+    $$('button').forEach((b) => { if (b.id !== 'btn-help' && b.id !== 'btn-theme') b.disabled = isBusy; });
+  }
+
+  function applyTheme(mode, opts = {}) {
+    const dark = mode === 'dark';
+    state.theme = dark ? 'dark' : 'light';
+    document.body.classList.toggle('dark', dark);
+    document.documentElement.dataset.theme = state.theme;
+    if (CH && CH.setTheme) CH.setTheme(state.theme);
+    const btn = $('btn-theme');
+    if (btn) {
+      btn.textContent = dark ? 'Light' : 'Dark';
+      btn.setAttribute('aria-pressed', String(dark));
+      btn.title = dark ? 'Switch to light theme' : 'Switch to dark theme';
+    }
+    if (opts.persist) localStorage.setItem('csa_theme_v1', state.theme);
+    if (opts.refresh && state.section && !state.busy) {
+      const y = window.scrollY;
+      setSection(state.section, { silent: true, instant: true });
+      setTimeout(() => window.scrollTo(0, y), 120);
+    }
   }
   function kpiGrid(id, items) {
     $(id).innerHTML = items.map((it) => `<div class="kpi"><div class="k">${esc(it.k)}</div><div class="v">${it.v}</div><div class="s">${esc(it.s || '')}</div></div>`).join('');
@@ -274,7 +295,7 @@
         else if (name === 'phase' && state.phaseRows.length) renderPhase();
         else if (name === 'stats' && state.metricsRows.length) renderStats();
         else if (name === 'export') updateManifest();
-        else CH.resizeAll(panel);
+        setTimeout(() => { try { CH.resizeAll(panel); } catch (e) { /* noop */ } }, 140);
       } catch (e) { console.error(e); toast(e.message || String(e), 'error'); }
     }, 80);
   }
@@ -283,6 +304,7 @@
     $$('[data-goto]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); setSection(a.dataset.goto); }));
     window.addEventListener('hashchange', () => setSection((location.hash || '#import').slice(1), { silent: true }));
     $('btn-help').addEventListener('click', () => $('help-modal').classList.add('open'));
+    $('btn-theme').addEventListener('click', () => applyTheme(state.theme === 'dark' ? 'light' : 'dark', { persist: true, refresh: true }));
     $('btn-close-help').addEventListener('click', () => $('help-modal').classList.remove('open'));
     $('help-modal').addEventListener('click', (e) => { if (e.target === $('help-modal')) $('help-modal').classList.remove('open'); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('help-modal').classList.remove('open'); });
@@ -1053,19 +1075,18 @@
       { numeric: [4, 5] });
 
     const animals = state.animals;
+    const overviewLegend = { orientation: 'h', x: 0, y: 1.06, yanchor: 'bottom', font: { size: 9 } };
     try {
       const timeline = SL.wholeTimeline(animals, state.settings, state.phaseMap, 30);
-      CH.plot($('overview-timeline'), timeline.map((s) => ({
-        x: s.times.map((t) => t / 24), y: s.mean, name: s.group, mode: 'lines', line: { color: C.groupColor(timeline.indexOf(s)), width: 1.6 }
-      })), (() => {
-        const l = CH.baseLayout('', { showlegend: true });
-        l.xaxis.title.text = 'Days'; l.yaxis.title.text = 'Activity / bin'; return l;
-      })());
+      CH.timelineChart($('overview-timeline'), timeline, {
+        title: '', legend: overviewLegend,
+        xTitle: 'Days from recording start', yTitle: 'Mean activity (counts/bin)'
+      });
     } catch (e) { CH.clear($('overview-timeline'), 'Timeline unavailable.'); }
     try {
       const prof = SL.groupProfiles(animals, state.settings, state.phaseMap, 'activity', 30, state.settings.timeBase, {});
       const shapes = CH.darkIntervalShapes(CH.darkFractions(animals, state.settings, state.phaseMap, prof.times.length, 30, state.settings.timeBase), prof.times.length, 30, { double: false });
-      CH.profileChart($('overview-profile'), prof, { title: '', style: 'lines', shapes });
+      CH.profileChart($('overview-profile'), prof, { title: '', style: 'lines', shapes, legend: overviewLegend, yTitle: 'Mean activity (counts/bin)' });
     } catch (e) { CH.clear($('overview-profile'), 'Profile unavailable.'); }
     state.dirty.overview = false;
   }
@@ -1820,6 +1841,7 @@
     setupImport();
     setupSettings();
     setupCharts();
+    applyTheme(localStorage.getItem('csa_theme_v1') === 'dark' ? 'dark' : 'light', { persist: false });
     updateManifest();
     const hash = (location.hash || '#import').slice(1);
     setSection(SECTION_NAMES[hash] ? hash : 'import', { silent: true, instant: true });

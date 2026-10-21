@@ -502,14 +502,15 @@
   const downloadText = (text, filename, mime) => downloadBlob(new Blob([text], { type: mime || 'text/plain;charset=utf-8' }), filename);
 
   /* ============================ palette ============================ */
-  // Okabe–Ito: colour-blind-safe categorical palette.
+  // High-chroma categorical palette derived from Okabe–Ito, with a stronger
+  // rose/magenta range for genotype-rich circular profiles.
   const palette = [
-    '#0072B2', '#D55E00', '#009E73', '#CC79A7',
-    '#E69F00', '#56B4E9', '#F0E442', '#000000',
-    '#999999', '#44AA99', '#882255', '#DDCC77'
+    '#0066FF', '#FF6B00', '#00B86B', '#F0388C',
+    '#FFC400', '#00B8E6', '#7A4DFF', '#E6194B',
+    '#00A896', '#B23AFF', '#FF8A00', '#5B6CFF'
   ];
-  const paletteNames = ['blue', 'vermillion', 'green', 'purple', 'orange', 'sky',
-    'yellow', 'black', 'grey', 'teal', 'wine', 'sand'];
+  const paletteNames = ['electric blue', 'vivid orange', 'emerald', 'rose',
+    'gold', 'cyan', 'violet', 'red', 'teal', 'magenta', 'amber', 'indigo'];
   const groupColor = (i) => palette[i % palette.length];
 
   /* ============================ misc ============================ */
