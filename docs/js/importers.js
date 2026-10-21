@@ -104,10 +104,18 @@
 
     const nCols = firstData.length;
     let metaCols = opts.metaCols;
+    if (!metaCols && header && header.length >= nCols) {
+      // Prefer the channel names in the header. DAM files can have four or
+      // five metadata columns before 32 channels, and a four-column layout
+      // would otherwise be mistaken for a 24-channel file.
+      const headerChannels = header.slice(3).filter((h) => /^(ch(?:annel)?\s*)?\d+$/i.test(String(h).trim())).length;
+      if (headerChannels >= 4) metaCols = Math.max(1, nCols - headerChannels);
+    }
     if (!metaCols) {
-      // Standard DAM2: 5 metadata + 32 channels = 37. Extended: 10 + 32 = 42.
-      // Zantiks 24-channel export: 10 + 24 = 34.
+      // Standard DAM2: 5 metadata + 32 channels = 37. A four-metadata-column
+      // 32-channel export is 36 columns. Zantiks 24-channel export: 10 + 24 = 34.
       if (nCols >= 37) metaCols = nCols - 32;
+      else if (nCols >= 36) metaCols = nCols - 32;
       else if (nCols >= 34) metaCols = nCols - 24;
       else metaCols = Math.max(4, nCols - 24);
     }
@@ -1172,27 +1180,47 @@
     if (!meta || !mapping) return configs;
     const rows = meta.rows;
     const norm = (v) => String(v ?? '').trim().toLowerCase();
+    const normKey = (v) => {
+      const s = norm(v);
+      return /^-?\d+(?:\.0+)?$/.test(s) ? String(Number(s)) : s;
+    };
     const clean = (v) => {
       const s = String(v ?? '').trim();
       return /^(na|n\/a|null|none|\.|-)$/i.test(s) ? '' : s;
     };
     const normFile = (v) => norm(v).replace(/\.[a-z0-9]+$/, '');
-    let matched = 0, genotyped = 0;
+    const metadataFiles = mapping.file
+      ? [...new Set(rows.map((r) => clean(r[mapping.file])).filter(Boolean))]
+      : [];
+    const dataFiles = [...new Set(configs.map((c) => c.file).filter(Boolean))];
+    const rowMatches = (cfg, r, ignoreFile) => {
+      const idVal = mapping.id ? normKey(r[mapping.id]) : '';
+      const chVal = mapping.channel ? normKey(r[mapping.channel]) : '';
+      const wellVal = mapping.well ? normKey(r[mapping.well]) : '';
+      const fileVal = mapping.file ? norm(r[mapping.file]) : '';
+      const cfgCh = normKey(cfg.channel ?? cfg.well ?? cfg.key);
+      const cfgWell = normKey(cfg.well);
+      const cfgFile = norm(cfg.file ?? '');
+      const idMatch = idVal && (idVal === normKey(cfg.id) || idVal === normKey(cfg.key) || idVal === cfgWell);
+      const chMatch = chVal && (chVal === cfgCh || chVal === cfgWell ||
+        chVal.replace(/^ch/, '') === cfgCh.replace(/^ch/, ''));
+      const wellMatch = wellVal && wellVal === cfgWell;
+      const fileMatch = ignoreFile || !mapping.file || !fileVal ||
+        fileVal === cfgFile || normFile(fileVal) === normFile(cfgFile);
+      return idMatch || ((chMatch || wellMatch) && fileMatch);
+    };
+    let matched = 0, genotyped = 0, fileFallback = 0;
     const matchedRows = new Set();
     for (const cfg of configs) {
-      let hit = null;
-      for (const r of rows) {
-        const idVal = mapping.id ? norm(r[mapping.id]) : '';
-        const chVal = mapping.channel ? norm(r[mapping.channel]) : '';
-        const wellVal = mapping.well ? norm(r[mapping.well]) : '';
-        const fileVal = mapping.file ? norm(r[mapping.file]) : '';
-        const cfgCh = norm(cfg.channel ?? cfg.well ?? cfg.key);
-        const cfgFile = norm(cfg.file ?? '');
-        const idMatch = idVal && (idVal === norm(cfg.id) || idVal === norm(cfg.key) || idVal === norm(cfg.well));
-        const chMatch = chVal && (chVal === cfgCh || chVal === norm(cfg.well) || chVal.replace(/^ch/, '') === cfgCh.replace(/^ch/, ''));
-        const wellMatch = wellVal && wellVal === norm(cfg.well);
-        const fileMatch = !mapping.file || !fileVal || fileVal === cfgFile || normFile(fileVal) === normFile(cfgFile);
-        if ((idMatch || ((chMatch || wellMatch) && fileMatch))) { hit = r; break; }
+      let hit = rows.find((r) => rowMatches(cfg, r, false)) || null;
+      if (!hit && mapping.file) {
+        // A renamed data file should not prevent a unique region/channel or
+        // well match. Only use this fallback when exactly one metadata row fits.
+        const candidates = rows.filter((r) => rowMatches(cfg, r, true));
+        if (candidates.length === 1) {
+          hit = candidates[0];
+          fileFallback++;
+        }
       }
       if (!hit) continue;
       matched++;
@@ -1226,7 +1254,10 @@
       matchedRows: matchedRows.size,
       unmatched: configs.length - matched,
       genotyped,
-      missingGenotype: matched - genotyped
+      missingGenotype: matched - genotyped,
+      metadataFiles,
+      dataFiles,
+      fileFallback
     };
     return configs;
   }

@@ -710,11 +710,14 @@
     const st = state.metadataStats;
     if (!st) return `${nRows} metadata rows loaded.`;
     if (!st.matched) {
-      return `No animals matched. Check the file, region/channel, well or animal ID join columns; set File / monitor to “none” to match across file names.`;
+      const mf = st.metadataFiles && st.metadataFiles.length ? st.metadataFiles.join(', ') : 'none';
+      const df = st.dataFiles && st.dataFiles.length ? st.dataFiles.join(', ') : 'none';
+      return `No animals matched. Metadata file: ${mf}. Data file: ${df}. Check the file, region/channel, well or animal ID join columns; set File / monitor to “none” to match across file names.`;
     }
     const suffix = st.unmatched ? ` ${st.unmatched} animal${st.unmatched === 1 ? '' : 's'} unmatched.` : '';
     const missing = st.missingGenotype ? ` ${st.missingGenotype} have no genotype in the metadata.` : '';
-    return `Linked ${st.matched} of ${st.total} animals to ${st.matchedRows} metadata rows. Genotype is added automatically.${suffix}${missing}`;
+    const fallback = st.fileFallback ? ` ${st.fileFallback} matched by region/channel because the file names differed.` : '';
+    return `Linked ${st.matched} of ${st.total} animals to ${st.matchedRows} metadata rows. Genotype is added automatically.${suffix}${missing}${fallback}`;
   }
 
   function updateMetadataStatus() {
