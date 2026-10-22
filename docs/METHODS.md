@@ -252,7 +252,7 @@ Missing bins are `NA`; group means use available animals and the n per bin is ex
 - Single- or double-plotted rows; day 1 at the top.
 - Bar actograms with a common, per-animal or 99th-percentile cap; day and night periods use separate washes, and a compact light-schedule bar above the plot labels Day and Night explicitly.
 - The diagonal period reference line is optional and off by default. Onset/offset markers and the LD→DD marker remain available through the overlay control.
-- A mean activity-level panel above the actograms shows activity by ZT with SEM error bars; bars use a day/night colour pair.
+- A mean activity-level panel above the actograms shows activity by ZT separately for each genotype (falling back to group when genotype is blank), with SEM error bars, per-genotype colours and night shading.
 - Average actograms normalise each animal before averaging; the app warns that DD groups with different τ should be phase- or τ-aligned.
 - Sleep actograms show sleep state instead of activity.
 - PNG/SVG export; multi-panel PNG composition.

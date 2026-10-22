@@ -1246,35 +1246,35 @@
   }
 
   /* ============================ render: actograms ============================ */
-  function combinedActivityProfile(animals, resMin = 30) {
-    const prof = SL.groupProfiles(animals, state.settings, state.phaseMap, 'activity', resMin, 'ZT', {});
-    const profiles = prof.groups.flatMap((g) => g.profiles || []);
-    const mean = new Array(prof.times.length).fill(NaN);
-    const sd = new Array(prof.times.length).fill(NaN);
-    const sem = new Array(prof.times.length).fill(NaN);
-    const n = new Array(prof.times.length).fill(0);
-    for (let s = 0; s < prof.times.length; s++) {
-      const vals = profiles.map((p) => p[s]).filter(C.isNum);
-      n[s] = vals.length;
-      if (vals.length) {
-        mean[s] = C.mean(vals);
-        if (vals.length > 1) { sd[s] = C.sd(vals); sem[s] = C.sem(vals); }
-      }
-    }
-    return { ...prof, groups: [{ group: 'Mean', mean, sd, sem, n, profiles, nAnimals: animals.length }] };
+  function genotypeActivityProfile(animals, resMin = 30) {
+    // Re-label a copy for the profile engine so genotypes, rather than arbitrary
+    // group names, are compared in this panel.
+    const byGenotype = animals.map((a) => ({
+      ...a,
+      group: (a.genotype && String(a.genotype).trim()) || a.group || 'Unassigned'
+    }));
+    return SL.groupProfiles(byGenotype, state.settings, state.phaseMap, 'activity', resMin, 'ZT', {});
   }
 
   function renderActogramActivity(animals, groupFilter) {
     const el = $('actogram-profile');
     if (!el) return;
     if (!animals.length) { CH.clear(el, 'No activity profile available.'); return; }
-    const prof = combinedActivityProfile(animals, 30);
+    const prof = genotypeActivityProfile(animals, 30);
     const dark = CH.darkFractions(animals, state.settings, state.phaseMap, prof.times.length, 30, 'ZT');
     const title = $('actogram-profile-title');
     const note = $('actogram-profile-note');
-    if (title) title.textContent = `Mean activity by ZT · ${groupFilter === '__all' ? 'all active groups' : groupFilter}`;
-    if (note) note.textContent = `Mean ± SEM across ${animals.length} animal${animals.length === 1 ? '' : 's'} · 30-min bins · blue = day, pale blue = night`;
-    CH.activityProfileChart(el, prof, { dark, resMin: 30 });
+    const scopeLabel = groupFilter === '__all' ? 'all active groups' : groupFilter;
+    const hasGenotype = animals.some((a) => a.genotype && String(a.genotype).trim());
+    const groupingLabel = hasGenotype ? 'genotype' : 'group';
+    if (title) title.textContent = `Mean activity by ZT · by ${groupingLabel} · ${scopeLabel}`;
+    if (note) note.textContent = `Mean ± SEM · ${animals.length} animals · ${prof.groups.length} ${groupingLabel}${prof.groups.length === 1 ? '' : 's'} · 30-min bins · shaded = night`;
+    CH.profileChart(el, prof, {
+      title: '', style: 'bars',
+      shapes: CH.darkIntervalShapes(dark, prof.times.length, 30, { fillcolor: CH.THEME.nightWash }),
+      xTitle: 'Zeitgeber time (h)', yTitle: 'Activity level', height: 380,
+      legend: { orientation: 'h', x: 0, y: 1.08, yanchor: 'bottom', font: { size: 9 } }
+    });
   }
 
   function renderActograms() {

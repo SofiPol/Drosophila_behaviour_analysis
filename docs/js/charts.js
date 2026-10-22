@@ -95,6 +95,13 @@
   function plot(el, data, layout, config) {
     if (!el) return;
     layout.autosize = true;
+    // Actogram cells and the compact activity card are sized by their Plotly
+    // layout rather than a CSS minimum; without this the bottom x-axis can be
+    // clipped when a cell contains only a few day rows.
+    if (C.isNum(layout.height) && el.classList &&
+        (el.classList.contains('actogram-cell') || el.classList.contains('actogram-profile'))) {
+      el.style.height = `${layout.height}px`;
+    }
     const done = el._fullLayout
       ? Plotly.react(el, data, layout, config || CONFIG)
       : Plotly.newPlot(el, data, layout, config || CONFIG);
@@ -212,7 +219,7 @@
       });
     }
 
-    const layout = baseLayout(opts.title || '', { showlegend: groups.length > 1 });
+    const layout = baseLayout(opts.title || '', { showlegend: groups.length > 1, height: opts.height });
     layout.xaxis.title.text = xTitle;
     layout.yaxis.title.text = yTitle;
     layout.xaxis.range = double ? [0, 48] : [0, 24];
