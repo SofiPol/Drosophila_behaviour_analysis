@@ -8,7 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css?v=2.3.9">
+<link rel="icon" type="image/svg+xml" href="assets/insect-mark.svg?v=2.4.1">
+<link rel="stylesheet" href="css/styles.css?v=2.4.3">
 </head>
 <body>
 <div class="app-shell">
@@ -19,7 +20,7 @@
       <span class="monogram">C</span>
       <span class="brand-text">
         <strong>Chronobiology Workbench</strong>
-        <small>circadian · sleep · behaviour</small>
+        <small><span class="brand-symbol" aria-hidden="true"></span>circadian · sleep · behaviour</small>
       </span>
     </a>
     <div class="section-marker">
@@ -69,14 +70,20 @@
     <!-- ============================================================ -->
     <section class="panel active" id="sec-import">
       <div class="hero">
-        <p class="eyebrow">Behavioural time-series analysis</p>
-        <h1 class="display">Read the rhythm<br><em>and the rest.</em></h1>
-        <p class="lede">Import DAM monitors, Zantiks plates, ethoscope recordings or any generic activity table. Score sleep, estimate circadian period with six independent methods, quantify phase and anticipation, and compare groups — all locally in your browser.</p>
-        <div class="hero-actions">
-          <button class="btn primary" id="btn-demo" type="button">Load synthetic demo</button>
-          <button class="btn ghost" id="btn-choose-files" type="button">Upload data</button>
+        <div class="hero-copy">
+          <p class="eyebrow">Behavioural time-series analysis</p>
+          <h1 class="display">Read the rhythm<br><em>and the rest.</em></h1>
+          <p class="lede">Import DAM monitors, Zantiks plates, ethoscope recordings or any generic activity table. Score sleep, estimate circadian period with six independent methods, quantify phase and anticipation, and compare groups — all locally in your browser.</p>
+          <div class="hero-actions">
+            <button class="btn primary" id="btn-demo" type="button">Load synthetic demo</button>
+            <button class="btn ghost" id="btn-choose-files" type="button">Upload data</button>
+          </div>
+          <p class="privacy-note">Nothing is uploaded to a server. The page runs entirely client-side.</p>
         </div>
-        <p class="privacy-note">Nothing is uploaded to a server. The page runs entirely client-side.</p>
+        <figure class="hero-figure" aria-hidden="true">
+          <img class="hero-figure-insect" src="assets/insect-drawing.png?v=2.4.3" alt="">
+          <figcaption><span>one animal</span><span>every rhythm</span></figcaption>
+        </figure>
       </div>
 
       <div class="grid-2">
@@ -574,7 +581,7 @@
       <a href="#stats" data-goto="stats"><span>09</span>Statistics</a>
       <a href="#export" data-goto="export"><span>10</span>Export</a>
     </div>
-<div class="footer-meta"><span>Chronobiology Workbench v2.3.9</span><span>Client-side · no data leaves your browser</span></div>
+<div class="footer-meta"><span>Chronobiology Workbench v2.4.3</span><span>Client-side · no data leaves your browser</span></div>
   </footer>
 </div>
 
@@ -600,14 +607,14 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/sql-wasm.js"></script>
-<script src="js/core.js?v=2.3.9"></script>
-<script src="js/stats.js?v=2.3.9"></script>
-<script src="js/importers.js?v=2.3.9"></script>
-<script src="js/sleep.js?v=2.3.9"></script>
-<script src="js/circadian.js?v=2.3.9"></script>
-<script src="js/phase.js?v=2.3.9"></script>
-<script src="js/charts.js?v=2.3.9"></script>
-<script src="js/sample.js?v=2.3.9"></script>
-<script src="js/app.js?v=2.3.9"></script>
+<script src="js/core.js?v=2.4.1"></script>
+<script src="js/stats.js?v=2.4.1"></script>
+<script src="js/importers.js?v=2.4.1"></script>
+<script src="js/sleep.js?v=2.4.1"></script>
+<script src="js/circadian.js?v=2.4.1"></script>
+<script src="js/phase.js?v=2.4.1"></script>
+<script src="js/charts.js?v=2.4.1"></script>
+<script src="js/sample.js?v=2.4.1"></script>
+<script src="js/app.js?v=2.4.1"></script>
 </body>
 </html>

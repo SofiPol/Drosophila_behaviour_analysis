@@ -374,6 +374,96 @@ td input:focus, td select:focus { border-color: hsl(var(--foreground) / 0.4); ba
 .stepper { background: rgba(255,255,255,0.95); }
 ::selection { background: var(--accent-red); color: #ffffff; }
 .hero .display em { font-style: normal; font-weight: 800; color: var(--accent-red); }
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(280px, 0.82fr);
+  align-items: center;
+  gap: 42px;
+}
+.hero-copy { min-width: 0; }
+.hero-figure {
+  position: relative;
+  min-height: 340px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  color: hsl(var(--text-primary));
+}
+.hero-figure::before {
+  content: '';
+  position: absolute;
+  width: min(320px, 88%);
+  aspect-ratio: 1;
+  border: 1px dashed hsl(var(--text-primary) / 0.22);
+  border-radius: 50%;
+  transform: rotate(-18deg);
+}
+.hero-figure::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-red);
+  top: 10%;
+  right: 14%;
+  box-shadow: 0 0 0 5px hsl(var(--background));
+}
+.hero-figure-insect {
+  position: relative;
+  display: block;
+  width: min(238px, 78%);
+  height: auto;
+  opacity: 0.92;
+  transform: translateY(-6px);
+  user-select: none;
+}
+body.dark .hero-figure-insect { filter: invert(1); }
+.hero-figure figcaption {
+  position: absolute;
+  bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-label);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: hsl(var(--text-muted));
+}
+.hero-figure figcaption span + span::before {
+  content: '·';
+  margin-right: 9px;
+  color: var(--accent-red);
+}
+.brand-text small { display: flex; align-items: center; gap: 6px; }
+.brand-symbol {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  background: currentColor;
+  -webkit-mask: url('../assets/insect-mark.svg') center / contain no-repeat;
+  mask: url('../assets/insect-mark.svg') center / contain no-repeat;
+  opacity: 0.8;
+}
+.section-head { position: relative; overflow: hidden; }
+.section-head > * { position: relative; z-index: 1; }
+.section-head::after {
+  content: '';
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  width: 70px;
+  height: 54px;
+  transform: translateY(-50%);
+  background: hsl(var(--text-primary));
+  -webkit-mask: url('../assets/insect-mark.svg') center / contain no-repeat;
+  mask: url('../assets/insect-mark.svg') center / contain no-repeat;
+  opacity: 0.045;
+  pointer-events: none;
+}
+body.dark .section-head::after { opacity: 0.12; }
 .lede { font-size: 18px; line-height: 1.62; color: #333333; }
 .section-note { font-size: 15px; color: #444444; }
 .card { background: #ffffff; border-color: rgba(17,17,17,0.16); border-radius: 0; }
@@ -552,6 +642,10 @@ body.dark .progress > i { background: #F5F5F5; }
   .topbar { grid-template-columns: 1fr auto; }
   .section-marker { display: none; }
   .section-note { text-align: left; }
+}
+@media (max-width: 900px) {
+  .hero { display: block; }
+  .hero-figure { display: none; }
 }
 @media (max-width: 700px) {
   .topbar { padding: 12px 18px; }
