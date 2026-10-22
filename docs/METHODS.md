@@ -250,8 +250,9 @@ Missing bins are `NA`; group means use available animals and the n per bin is ex
 ### Actograms
 
 - Single- or double-plotted rows; day 1 at the top.
-- Bar actograms with a common, per-animal or 99th-percentile cap; dark phase shaded.
-- Optional period line, onset/offset overlay and LD→DD marker.
+- Bar actograms with a common, per-animal or 99th-percentile cap; day and night periods use separate washes, and a compact light-schedule bar above the plot labels Day and Night explicitly.
+- The diagonal period reference line is optional and off by default. Onset/offset markers and the LD→DD marker remain available through the overlay control.
+- A mean activity-level panel above the actograms shows activity by ZT with SEM error bars; bars use a day/night colour pair.
 - Average actograms normalise each animal before averaging; the app warns that DD groups with different τ should be phase- or τ-aligned.
 - Sleep actograms show sleep state instead of activity.
 - PNG/SVG export; multi-panel PNG composition.
@@ -325,7 +326,7 @@ Known limitations:
 - Lomb–Scargle and cosinor fit a single sinusoid. A strongly bimodal actogram or a short, entrained LD segment can bias the peak; estimate τ in constant conditions (DD/LL) and use chi-square or autocorrelation as a cross-check.
 - The strict “power ≥ 10 and width ≥ 2 h” rhythmic criterion is deliberately conservative. The significant-peak column is shown separately.
 - Cycle length *T* is used for ZT/day indexing and period search, but profile and actogram axes are drawn as 24 h/48 h. Non-24 h display requires adapting those axes.
-- Actograms are bar actograms; a heat-map alternative and τ-aligned rows are not included. Single/double plotting, dark-phase shading, onset/offset markers, period lines and the LD→DD marker are included.
+- Actograms are bar actograms; a heat-map alternative and τ-aligned rows are not included. Single/double plotting, day/night washes, the light-schedule bar, onset/offset markers, optional period lines and the LD→DD marker are included.
 - Ethoscope SQLite databases are loaded into browser memory; multi-GB databases should be exported to CSV/Parquet first.
 - Mixed-effects and repeated-measures models are not implemented.
 - PDF output is produced through the browser print dialog.

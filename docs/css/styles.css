@@ -279,6 +279,7 @@ td input:focus, td select:focus { border-color: hsl(var(--foreground) / 0.4); ba
 /* ---------------- charts ---------------- */
 .chart { width: 100%; min-height: 340px; background: var(--paper); border-radius: 4px; overflow: hidden; }
 .chart.tall { min-height: 420px; }
+.chart.actogram-profile { min-height: 360px; }
 .chart .js-plotly-plot { border-radius: 4px; }
 .empty-state {
   min-height: 240px; display: grid; place-items: center; text-align: center;

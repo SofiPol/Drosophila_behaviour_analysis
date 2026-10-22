@@ -17,6 +17,14 @@
     sleep: '#00B8E6',
     wake: '#FFC400',
     dark: 'rgba(17,17,17,0.07)',
+    dayWash: 'rgba(247,215,116,0.10)',
+    nightWash: 'rgba(24,24,24,0.22)',
+    dayBand: '#F2C94C',
+    nightBand: '#3D3D3D',
+    dayBandInk: '#111111',
+    nightBandInk: '#FFFFFF',
+    dayActivity: '#2E86DE',
+    nightActivity: '#8FD3FF',
     missing: '#D9D9D9',
     accent: '#C1121F',
     green: '#00B86B',
@@ -34,6 +42,14 @@
     axis: 'rgba(255,255,255,0.38)',
     bar: '#F5F5F5',
     dark: 'rgba(255,255,255,0.08)',
+    dayWash: 'rgba(214,178,76,0.12)',
+    nightWash: 'rgba(255,255,255,0.18)',
+    dayBand: '#D9B44A',
+    nightBand: '#606060',
+    dayBandInk: '#111111',
+    nightBandInk: '#FFFFFF',
+    dayActivity: '#4DA3FF',
+    nightActivity: '#9EE6FF',
     missing: '#555555',
     accent: '#FF4D6D'
   });
@@ -102,20 +118,20 @@
     if (!fractions) return [];
     const shapes = [];
     const stepH = resMin / 60;
-    const alpha = opts.alpha ?? 0.13;
+    const shade = opts.fillcolor || THEME.nightWash || THEME.dark;
     let start = null;
     const push = (a, b) => {
       if (b <= a) return;
       shapes.push({
         type: 'rect', xref: 'x', yref: opts.yref || 'paper',
         x0: a, x1: b, y0: opts.y0 ?? 0, y1: opts.y1 ?? 1,
-        fillcolor: THEME.dark, opacity: opts.opacity ?? 1, line: { width: 0 }, layer: 'below'
+        fillcolor: shade, opacity: opts.opacity ?? 1, line: { width: 0 }, layer: 'below'
       });
       if (opts.double) {
         shapes.push({
           type: 'rect', xref: 'x', yref: opts.yref || 'paper',
           x0: a + 24, x1: b + 24, y0: opts.y0 ?? 0, y1: opts.y1 ?? 1,
-          fillcolor: THEME.dark, opacity: opts.opacity ?? 1, line: { width: 0 }, layer: 'below'
+          fillcolor: shade, opacity: opts.opacity ?? 1, line: { width: 0 }, layer: 'below'
         });
       }
     };
@@ -210,6 +226,62 @@
       layout.margin.t = Math.max(layout.margin.t, 56);
     }
     plot(el, traces, layout);
+  }
+
+  function activityProfileChart(el, profile, opts = {}) {
+    const group = profile && profile.groups && profile.groups[0];
+    if (!group) { clear(el, 'No activity profile available.'); return; }
+    const times = profile.times || [];
+    const dark = opts.dark || [];
+    const colors = times.map((_, i) => (dark[i] > 0.5 ? THEME.nightActivity : THEME.dayActivity));
+    const trace = {
+      type: 'bar', x: times, y: group.mean, name: group.group,
+      marker: { color: colors, line: { width: 0 } },
+      error_y: {
+        type: 'data', array: group.sem, visible: true,
+        color: THEME.ink, thickness: 1.3, width: 3
+      },
+      hovertemplate: `${group.group}<br>ZT: %{x:.1f} h<br>Activity: %{y:.2f}<extra></extra>`
+    };
+    const layout = baseLayout(opts.title || '', { showlegend: false, height: opts.height || 360 });
+    layout.xaxis.title.text = 'Zeitgeber time (h)';
+    layout.xaxis.title.standoff = 10;
+    layout.xaxis.range = [0, 24];
+    layout.xaxis.tickvals = [0, 4, 8, 12, 16, 20, 24];
+    layout.xaxis.showline = true;
+    layout.xaxis.linecolor = THEME.ink;
+    layout.xaxis.linewidth = 1.1;
+    layout.xaxis.ticks = 'outside';
+    layout.xaxis.ticklen = 5;
+    layout.xaxis.tickcolor = THEME.ink;
+    layout.xaxis.tickfont = { family: MONO, size: 10, color: THEME.ink };
+    layout.xaxis.zeroline = false;
+    layout.yaxis.title.text = 'Activity level';
+    layout.yaxis.title.standoff = 8;
+    layout.yaxis.rangemode = 'tozero';
+    layout.yaxis.showline = true;
+    layout.yaxis.linecolor = THEME.ink;
+    layout.yaxis.linewidth = 1.1;
+    layout.yaxis.ticks = 'outside';
+    layout.yaxis.ticklen = 5;
+    layout.yaxis.tickcolor = THEME.ink;
+    layout.yaxis.tickfont = { family: MONO, size: 10, color: THEME.ink };
+    layout.yaxis.showgrid = true;
+    layout.yaxis.zeroline = false;
+    layout.bargap = 0.03;
+    layout.bargroupgap = 0;
+    layout.margin = { l: 76, r: 22, t: opts.title ? 54 : 26, b: 62 };
+    const shapes = [];
+    if (dark.length) {
+      shapes.push({
+        type: 'rect', xref: 'x', yref: 'paper', x0: 0, x1: 24, y0: 0, y1: 1,
+        fillcolor: THEME.dayWash, opacity: 1, line: { width: 0 }, layer: 'below'
+      });
+      shapes.push(...darkIntervalShapes(dark, dark.length, opts.resMin || 30, { fillcolor: THEME.nightWash }));
+    }
+    if (opts.shapes) shapes.push(...opts.shapes);
+    if (shapes.length) layout.shapes = shapes;
+    plot(el, [trace], layout, { displayModeBar: false, responsive: true });
   }
 
   /* ============================ sleep architecture ============================ */
@@ -387,10 +459,82 @@
     };
   }
 
+  function lightPattern(matrix) {
+    const { todBins, light } = matrix;
+    const pattern = new Array(todBins).fill(null);
+    if (!light || !light.length) return pattern;
+    // Use the earliest complete recording day as the reference schedule, then
+    // fill gaps from later days. This avoids a long DD period erasing the LD
+    // photoperiod when the first day contains missing light values.
+    const filled = new Array(todBins).fill(false);
+    for (let r = 0; r < light.length; r++) {
+      for (let s = 0; s < todBins; s++) {
+        if (filled[s]) continue;
+        const v = light[r][s];
+        if (v === 0 || v === 1) { pattern[s] = v; filled[s] = true; }
+      }
+    }
+    return pattern;
+  }
+
+  function phaseRuns(pattern) {
+    const runs = [];
+    let start = null;
+    let value = null;
+    for (let s = 0; s <= pattern.length; s++) {
+      const v = s < pattern.length ? pattern[s] : null;
+      if (v !== value) {
+        if (value !== null && start !== null) runs.push({ start, end: s, light: value });
+        start = s;
+        value = v;
+      }
+    }
+    return runs;
+  }
+
+  function actogramSchedule(matrix, double) {
+    const pattern = lightPattern(matrix);
+    const runs = phaseRuns(pattern);
+    const shapes = [];
+    const annotations = [];
+    if (!runs.length) return { pattern, shapes, annotations, hasData: false };
+    const nMulti = double ? 2 : 1;
+    const binHours = matrix.binHours;
+    for (let m = 0; m < nMulti; m++) {
+      for (const run of runs) {
+        const x0 = run.start * binHours + m * 24;
+        const x1 = run.end * binHours + m * 24;
+        const isDay = run.light === 1;
+        shapes.push({
+          type: 'rect', xref: 'x', yref: 'y2',
+          x0, x1, y0: 0.16, y1: 0.84,
+          fillcolor: isDay ? THEME.dayBand : THEME.nightBand,
+          opacity: 1, line: { width: 0 }, layer: 'above'
+        });
+        if (x1 - x0 >= 3) {
+          annotations.push({
+            xref: 'x', yref: 'y2', x: (x0 + x1) / 2, y: 0.5,
+            text: isDay ? 'Day' : 'Night', showarrow: false,
+            font: { family: MONO, size: 8, color: isDay ? THEME.dayBandInk : THEME.nightBandInk },
+            align: 'center'
+          });
+        }
+      }
+    }
+    shapes.push({
+      type: 'rect', xref: 'x', yref: 'y2',
+      x0: 0, x1: nMulti * 24, y0: 0.16, y1: 0.84,
+      fillcolor: 'rgba(0,0,0,0)', opacity: 1,
+      line: { color: THEME.axis, width: 0.8 }, layer: 'above'
+    });
+    return { pattern, shapes, annotations, hasData: true };
+  }
+
   function actogramShapes(matrix, double, opts = {}) {
     const shapes = [];
     const { days, todBins, binHours, light } = matrix;
     const nMulti = double ? 2 : 1;
+    const hasLight = (light || []).some((row) => row && row.some((v) => v === 0 || v === 1));
     for (let d = 0; d < days.length; d++) {
       shapes.push({
         type: 'line', xref: 'x', yref: 'y',
@@ -400,31 +544,39 @@
       for (let m = 0; m < nMulti; m++) {
         const target = d + m;
         if (target >= light.length) continue;
-        let start = null;
-        for (let s = 0; s <= todBins; s++) {
-          const dark = s < todBins ? light[target][s] === 0 : false;
-          if (dark && start === null) start = s * binHours + m * 24;
-          if (!dark && start !== null) {
-            shapes.push({
-              type: 'rect', xref: 'x', yref: 'y',
-              x0: start, x1: s * binHours + m * 24, y0: d + 0.06, y1: d + 0.94,
-              fillcolor: THEME.dark, opacity: 0.9, line: { width: 0 }, layer: 'below'
-            });
-            start = null;
+        const rowLight = light[target] || [];
+        const rowHasLight = rowLight.some((v) => v === 0 || v === 1);
+        if (hasLight && rowHasLight) {
+          // A pale day wash plus a stronger night band makes the photoperiod
+          // readable even when the activity bars are dense.
+          shapes.push({
+            type: 'rect', xref: 'x', yref: 'y',
+            x0: m * 24, x1: m * 24 + 24, y0: d + 0.04, y1: d + 0.96,
+            fillcolor: THEME.dayWash, opacity: 1, line: { width: 0 }, layer: 'below'
+          });
+          let start = null;
+          for (let s = 0; s <= todBins; s++) {
+            const dark = s < todBins ? rowLight[s] === 0 : false;
+            if (dark && start === null) start = s * binHours + m * 24;
+            if (!dark && start !== null) {
+              shapes.push({
+                type: 'rect', xref: 'x', yref: 'y',
+                x0: start, x1: s * binHours + m * 24, y0: d + 0.04, y1: d + 0.96,
+                fillcolor: THEME.nightWash, opacity: 1, line: { width: 0 }, layer: 'below'
+              });
+              start = null;
+            }
           }
         }
       }
     }
-    if (opts.periodTau && C.isNum(opts.periodTau)) {
+    if (opts.showPeriodLine && opts.periodTau && C.isNum(opts.periodTau)) {
       const slope = (opts.periodTau - 24) / 24; // day rows per hour
       for (let d = 0; d < days.length; d++) {
-        // small period reference line across each row
-        const x0 = 0;
-        const x1 = 24;
-        const y0 = d + slope * 0;
-        const y1 = d + slope * 24;
+        const x1 = nMulti * 24;
         shapes.push({
-          type: 'line', xref: 'x', yref: 'y', x0, x1, y0, y1,
+          type: 'line', xref: 'x', yref: 'y',
+          x0: 0, x1, y0: d, y1: d + slope * x1,
           line: { color: 'rgba(164,90,82,0.65)', width: 1, dash: 'dot' }, layer: 'above'
         });
       }
@@ -442,20 +594,55 @@
   }
 
   function actogramLayout(title, matrix, double, opts = {}) {
+    const schedule = !!(opts.schedule && opts.schedule.hasData);
     const layout = baseLayout(title, { showlegend: false });
-    layout.xaxis.title.text = double ? 'Time (h, double-plotted)' : 'Time (h)';
+    layout.xaxis.title.text = double ? 'Zeitgeber time (h, double-plotted)' : 'Zeitgeber time (h)';
     layout.xaxis.range = [0, double ? 48 : 24];
-    layout.xaxis.tickvals = double ? [0, 12, 24, 36, 48] : [0, 6, 12, 18, 24];
+    layout.xaxis.tickvals = double
+      ? [0, 6, 12, 18, 24, 30, 36, 42, 48]
+      : [0, 4, 8, 12, 16, 20, 24];
+    layout.xaxis.title.standoff = 10;
+    layout.xaxis.showline = true;
+    layout.xaxis.linecolor = THEME.ink;
+    layout.xaxis.linewidth = 1.1;
+    layout.xaxis.ticks = 'outside';
+    layout.xaxis.ticklen = 5;
+    layout.xaxis.tickcolor = THEME.ink;
+    layout.xaxis.tickfont = { family: MONO, size: 10, color: THEME.ink };
+    layout.xaxis.zeroline = false;
+    layout.xaxis.automargin = true;
     layout.yaxis.title.text = 'Day';
+    layout.yaxis.title.standoff = 10;
+    layout.yaxis.showline = true;
+    layout.yaxis.linecolor = THEME.ink;
+    layout.yaxis.linewidth = 1.1;
+    layout.yaxis.ticks = 'outside';
+    layout.yaxis.ticklen = 5;
+    layout.yaxis.tickcolor = THEME.ink;
+    layout.yaxis.tickfont = { family: MONO, size: 10, color: THEME.ink };
+    layout.yaxis.showgrid = false;
+    layout.yaxis.zeroline = false;
+    layout.yaxis.automargin = true;
     layout.yaxis.autorange = 'reversed';
     layout.yaxis.range = [matrix.days.length - 0.5, -0.5];
     layout.yaxis.dtick = Math.max(1, Math.ceil(matrix.days.length / 14));
     layout.yaxis.tickvals = matrix.days.length <= 20
       ? matrix.days
       : matrix.days.filter((_, i) => i % Math.max(1, Math.ceil(matrix.days.length / 14)) === 0);
-    layout.margin = { l: 62, r: 18, t: title ? 50 : 20, b: 46 };
+    layout.yaxis.domain = schedule ? [0, 0.86] : [0, 0.96];
+    if (schedule) {
+      layout.yaxis2 = {
+        domain: [0.90, 0.97], range: [0, 1], visible: false,
+        fixedrange: true, showgrid: false, zeroline: false, showline: false
+      };
+    }
+    layout.margin = { l: 76, r: 22, t: schedule ? 98 : (title ? 54 : 26), b: 66 };
+    if (schedule && layout.title) {
+      layout.title.y = 1;
+      layout.title.yanchor = 'top';
+    }
     layout.hovermode = 'closest';
-    layout.height = Math.max(300, matrix.days.length * 19 + 150);
+    layout.height = Math.max(360, matrix.days.length * 19 + (schedule ? 210 : 160));
     return layout;
   }
 
@@ -466,8 +653,10 @@
     let cmax = opts.cmax;
     if (!C.isNum(cmax)) cmax = actogramScaling([animal], { ...opts, binMin, scaleMode: opts.scaleMode || 'percentile' });
     const trace = barActogramTrace(matrix, cmax, double, opts.color || THEME.bar, opts);
-    const layout = actogramLayout(opts.title || `${animal.id}${animal.group ? ' · ' + animal.group : ''}`, matrix, double, opts);
-    layout.shapes = actogramShapes(matrix, double, opts);
+    const schedule = actogramSchedule(matrix, double);
+    const layout = actogramLayout(opts.title || `${animal.id}${animal.group ? ' · ' + animal.group : ''}`, matrix, double, { ...opts, schedule });
+    layout.shapes = actogramShapes(matrix, double, opts).concat(schedule.shapes);
+    layout.annotations = schedule.annotations;
     const traces = [trace];
     if (opts.markers && opts.markers.length) {
       for (const kind of ['onset', 'offset']) {
@@ -523,8 +712,10 @@
     let cmax = opts.cmax;
     if (!C.isNum(cmax)) cmax = vals.length ? vals[Math.min(vals.length - 1, Math.floor(0.99 * vals.length))] : 1;
     const trace = barActogramTrace(matrix, cmax, double, opts.color || THEME.bar, opts);
-    const layout = actogramLayout(opts.title || `Average actogram (n=${animals.length})`, matrix, double, opts);
-    layout.shapes = actogramShapes(matrix, double, opts);
+    const schedule = actogramSchedule(matrix, double);
+    const layout = actogramLayout(opts.title || `Average actogram (n=${animals.length})`, matrix, double, { ...opts, schedule });
+    layout.shapes = actogramShapes(matrix, double, opts).concat(schedule.shapes);
+    layout.annotations = schedule.annotations;
     plot(el, [trace], layout, { displayModeBar: false, responsive: true });
   }
 
@@ -550,8 +741,10 @@
     }
     const matrix = { days, todBins, binHours: binMin / 60, z, light, dayMin: days[0], dayMax: days[days.length - 1] };
     const trace = barActogramTrace(matrix, 1, double, THEME.sleep, { barWidth: 2.6 });
-    const layout = actogramLayout(opts.title || `Sleep actogram · ${animal.id}`, matrix, double, opts);
-    layout.shapes = actogramShapes(matrix, double, opts);
+    const schedule = actogramSchedule(matrix, double);
+    const layout = actogramLayout(opts.title || `Sleep actogram · ${animal.id}`, matrix, double, { ...opts, schedule });
+    layout.shapes = actogramShapes(matrix, double, opts).concat(schedule.shapes);
+    layout.annotations = schedule.annotations;
     plot(el, [trace], layout, { displayModeBar: false, responsive: true });
   }
 
@@ -922,7 +1115,7 @@
 
   global.Charts = {
     THEME, baseLayout, plot, clear, darkFractions, darkIntervalShapes,
-    profileChart, sleepArchitectureChart, transitionChart, sleepCategoryChart, circularChart,
+    profileChart, activityProfileChart, sleepArchitectureChart, transitionChart, sleepCategoryChart, circularChart,
     actogramMatrix, actogram, averageActogram, sleepActogram, actogramScaling,
     rasterChart, periodogramChart, periodDistributionChart, autocorrelationChart,
     boxPlot, barSummaryChart, timelineChart, histogramChart, multiBoxPlot,

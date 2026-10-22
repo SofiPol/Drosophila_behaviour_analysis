@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css?v=2.3.5">
+<link rel="stylesheet" href="css/styles.css?v=2.3.6">
 </head>
 <body>
 <div class="app-shell">
@@ -276,7 +276,7 @@
     <section class="panel" id="sec-actograms">
       <div class="section-head">
         <div><p class="eyebrow">04 · Actograms</p><h2 class="display">Days, stacked.</h2></div>
-        <p class="section-note">Double-plotted bar actograms with dark-phase shading, onset markers and an optional period line.</p>
+        <p class="section-note">Double-plotted bar actograms with explicit day/night shading, a phase bar above the plot and an optional period reference line.</p>
       </div>
       <article class="card">
         <div class="controls">
@@ -286,8 +286,9 @@
           <label>Bin<select id="act-bin"><option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option><option value="30" selected>30 min</option><option value="60">60 min</option></select></label>
           <label>Scaling<select id="act-scale"><option value="percentile">99th percentile</option><option value="common">Common max</option><option value="perAnimal">Per animal</option></select></label>
           <label class="check-label"><input type="checkbox" id="act-double" checked> Double plot</label>
-          <label class="check-label"><input type="checkbox" id="act-overlay" checked> Overlays</label>
-          <label>Period line τ (h)<input type="number" id="act-period-tau" placeholder="auto" step="0.1" min="16" max="32"></label>
+          <label class="check-label"><input type="checkbox" id="act-overlay" checked> Onset markers</label>
+          <label class="check-label"><input type="checkbox" id="act-period-line"> Period line</label>
+          <label>Period line τ (h)<input type="number" id="act-period-tau" placeholder="auto" step="0.1" min="16" max="32" disabled></label>
           <label class="check-label"><input type="checkbox" id="act-sleep"> Sleep actogram</label>
           <button class="btn primary" id="btn-render-actograms" type="button">Render actograms</button>
         </div>
@@ -297,6 +298,10 @@
           <button class="btn ghost small" id="act-next" type="button">Next →</button>
           <button class="btn ghost small" id="btn-export-actogram" type="button">Export figure</button>
         </div>
+      </article>
+      <article class="card">
+        <header class="card-head"><span class="card-index">A</span><div><h3 id="actogram-profile-title">Mean activity by ZT</h3><p id="actogram-profile-note">Mean ± SEM · 30-min bins · blue = day, pale blue = night</p></div><button class="btn tiny ghost" data-export="actogram-profile" type="button">Export</button></header>
+        <div class="chart actogram-profile" id="actogram-profile"></div>
       </article>
       <div class="actogram-grid" id="actogram-grid"></div>
     </section>
@@ -569,7 +574,7 @@
       <a href="#stats" data-goto="stats"><span>09</span>Statistics</a>
       <a href="#export" data-goto="export"><span>10</span>Export</a>
     </div>
-    <div class=\"footer-meta\"><span>Chronobiology Workbench v2.3.5</span><span>Client-side · no data leaves your browser</span></div>
+<div class="footer-meta"><span>Chronobiology Workbench v2.3.6</span><span>Client-side · no data leaves your browser</span></div>
   </footer>
 </div>
 
@@ -595,14 +600,14 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/sql-wasm.js"></script>
-<script src="js/core.js?v=2.3.5"></script>
-<script src="js/stats.js?v=2.3.5"></script>
-<script src="js/importers.js?v=2.3.5"></script>
-<script src="js/sleep.js?v=2.3.5"></script>
-<script src="js/circadian.js?v=2.3.5"></script>
-<script src="js/phase.js?v=2.3.5"></script>
-<script src="js/charts.js?v=2.3.5"></script>
-<script src="js/sample.js?v=2.3.5"></script>
-<script src="js/app.js?v=2.3.5"></script>
+<script src="js/core.js?v=2.3.6"></script>
+<script src="js/stats.js?v=2.3.6"></script>
+<script src="js/importers.js?v=2.3.6"></script>
+<script src="js/sleep.js?v=2.3.6"></script>
+<script src="js/circadian.js?v=2.3.6"></script>
+<script src="js/phase.js?v=2.3.6"></script>
+<script src="js/charts.js?v=2.3.6"></script>
+<script src="js/sample.js?v=2.3.6"></script>
+<script src="js/app.js?v=2.3.6"></script>
 </body>
 </html>

@@ -1246,6 +1246,37 @@
   }
 
   /* ============================ render: actograms ============================ */
+  function combinedActivityProfile(animals, resMin = 30) {
+    const prof = SL.groupProfiles(animals, state.settings, state.phaseMap, 'activity', resMin, 'ZT', {});
+    const profiles = prof.groups.flatMap((g) => g.profiles || []);
+    const mean = new Array(prof.times.length).fill(NaN);
+    const sd = new Array(prof.times.length).fill(NaN);
+    const sem = new Array(prof.times.length).fill(NaN);
+    const n = new Array(prof.times.length).fill(0);
+    for (let s = 0; s < prof.times.length; s++) {
+      const vals = profiles.map((p) => p[s]).filter(C.isNum);
+      n[s] = vals.length;
+      if (vals.length) {
+        mean[s] = C.mean(vals);
+        if (vals.length > 1) { sd[s] = C.sd(vals); sem[s] = C.sem(vals); }
+      }
+    }
+    return { ...prof, groups: [{ group: 'Mean', mean, sd, sem, n, profiles, nAnimals: animals.length }] };
+  }
+
+  function renderActogramActivity(animals, groupFilter) {
+    const el = $('actogram-profile');
+    if (!el) return;
+    if (!animals.length) { CH.clear(el, 'No activity profile available.'); return; }
+    const prof = combinedActivityProfile(animals, 30);
+    const dark = CH.darkFractions(animals, state.settings, state.phaseMap, prof.times.length, 30, 'ZT');
+    const title = $('actogram-profile-title');
+    const note = $('actogram-profile-note');
+    if (title) title.textContent = `Mean activity by ZT · ${groupFilter === '__all' ? 'all active groups' : groupFilter}`;
+    if (note) note.textContent = `Mean ± SEM across ${animals.length} animal${animals.length === 1 ? '' : 's'} · 30-min bins · blue = day, pale blue = night`;
+    CH.activityProfileChart(el, prof, { dark, resMin: 30 });
+  }
+
   function renderActograms() {
     if (!state.animals.length) { state.dirty.actograms = false; return; }
     const groupFilter = $('act-group-filter').value;
@@ -1256,6 +1287,7 @@
     const double = $('act-double').checked;
     const scaleMode = $('act-scale').value;
     const sleepMode = $('act-sleep').checked;
+    const showPeriodLine = !!($('act-period-line') && $('act-period-line').checked);
     const tauInput = parseFloat($('act-period-tau').value);
     const tau = C.isNum(tauInput) ? tauInput : null;
     const showOverlay = $('act-overlay').checked;
@@ -1279,7 +1311,7 @@
           const pm = state.phaseMap.get(members[0].id);
           if (pm) for (const [d, p] of pm) if (p === 'DD') { ddDay = d; break; }
         }
-        CH.averageActogram(cell, members, { binMin, double, scaleMode, title: `${g} · average (n=${members.length})`, periodTau: C.isNum(tauForGroup) ? tauForGroup : null, ddDay });
+        CH.averageActogram(cell, members, { binMin, double, scaleMode, title: `${g} · average (n=${members.length})`, periodTau: showPeriodLine && C.isNum(tauForGroup) ? tauForGroup : null, showPeriodLine, ddDay });
       });
       $('act-page-label').textContent = `${groups.length} group${groups.length > 1 ? 's' : ''}`;
     } else {
@@ -1302,11 +1334,13 @@
         const pm = state.phaseMap.get(a.id);
         if (pm) for (const [d, p] of pm) if (p === 'DD') { ddDay = d; break; }
       }
-      if (sleepMode) CH.sleepActogram(cell, a, state.settings, state.phaseMap, { binMin, double, title: `Sleep · ${a.id} · ${a.group}`, periodTau: tauForAnimal, ddDay });
-      else CH.actogram(cell, a, { binMin, double, scaleMode, title: `${a.id} · ${a.group}`, periodTau: tauForAnimal, markers, ddDay });
+      const periodTau = showPeriodLine ? tauForAnimal : null;
+      if (sleepMode) CH.sleepActogram(cell, a, state.settings, state.phaseMap, { binMin, double, title: `Sleep · ${a.id} · ${a.group}`, periodTau, showPeriodLine, ddDay });
+      else CH.actogram(cell, a, { binMin, double, scaleMode, title: `${a.id} · ${a.group}`, periodTau, showPeriodLine, markers, ddDay });
       $('act-page-label').textContent = `${state.actogramPage + 1} / ${animals.length} · ${a.id}`;
       $('act-animal-select').value = a.id;
     }
+    renderActogramActivity(animals, groupFilter);
     state.dirty.actograms = false;
   }
 
@@ -1941,6 +1975,16 @@
   function setupCharts() {
     $('btn-run-all').addEventListener('click', guard(async () => { if (!state.animals.length) throw new Error('Build a dataset first.'); await runAll(); toast('All analyses complete.', 'success'); }));
     $('btn-render-actograms').addEventListener('click', guard(renderActograms));
+    const periodToggle = $('act-period-line');
+    const periodTauInput = $('act-period-tau');
+    if (periodToggle && periodTauInput) {
+      const syncPeriodInput = () => { periodTauInput.disabled = !periodToggle.checked; };
+      periodToggle.addEventListener('change', guard(() => {
+        syncPeriodInput();
+        if (state.animals.length) renderActograms();
+      }));
+      syncPeriodInput();
+    }
     $('act-mode').addEventListener('change', guard(renderActograms));
     $('act-group-filter').addEventListener('change', guard(renderActograms));
     $('act-animal-select').addEventListener('change', guard(() => {
