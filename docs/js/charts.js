@@ -545,26 +545,27 @@
         const target = d + m;
         if (target >= light.length) continue;
         const rowLight = light[target] || [];
-        const rowHasLight = rowLight.some((v) => v === 0 || v === 1);
-        if (hasLight && rowHasLight) {
-          // A pale day wash plus a stronger night band makes the photoperiod
-          // readable even when the activity bars are dense.
-          shapes.push({
-            type: 'rect', xref: 'x', yref: 'y',
-            x0: m * 24, x1: m * 24 + 24, y0: d + 0.04, y1: d + 0.96,
-            fillcolor: THEME.dayWash, opacity: 1, line: { width: 0 }, layer: 'below'
-          });
+        if (hasLight && rowLight.some((v) => v === 0 || v === 1)) {
+          // Draw exact light and dark runs rather than assuming that missing
+          // bins are daytime. The wash is deliberately strong enough to remain
+          // visible behind dense activity bars.
           let start = null;
+          let phase = null;
           for (let s = 0; s <= todBins; s++) {
-            const dark = s < todBins ? rowLight[s] === 0 : false;
-            if (dark && start === null) start = s * binHours + m * 24;
-            if (!dark && start !== null) {
-              shapes.push({
-                type: 'rect', xref: 'x', yref: 'y',
-                x0: start, x1: s * binHours + m * 24, y0: d + 0.04, y1: d + 0.96,
-                fillcolor: THEME.nightWash, opacity: 1, line: { width: 0 }, layer: 'below'
-              });
-              start = null;
+            const v = s < todBins ? rowLight[s] : null;
+            const next = (v === 0 || v === 1) ? v : null;
+            if (next !== phase) {
+              if (phase !== null && start !== null) {
+                shapes.push({
+                  type: 'rect', xref: 'x', yref: 'y',
+                  x0: start * binHours + m * 24, x1: s * binHours + m * 24,
+                  y0: d + 0.04, y1: d + 0.96,
+                  fillcolor: phase === 1 ? THEME.dayWash : THEME.nightWash,
+                  opacity: 1, line: { width: 0 }, layer: 'below'
+                });
+              }
+              start = s;
+              phase = next;
             }
           }
         }
