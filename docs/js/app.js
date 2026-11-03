@@ -11,6 +11,7 @@
   const CL = window.CircadianLab;
   const PL = window.PhaseLab;
   const LL = window.LifespanLab;
+  const VL = window.VideoLab;
   const CH = window.Charts;
   const SM = window.SampleData;
 
@@ -23,7 +24,7 @@
   const SECTION_NAMES = {
     import: ['01', 'Import'], settings: ['02', 'Settings'], overview: ['03', 'Overview'],
     actograms: ['04', 'Actograms'], profiles: ['05', 'Profiles'], sleep: ['06', 'Sleep'],
-    circadian: ['07', 'Circadian'], phase: ['08', 'Phase'], stats: ['09', 'Statistics'], survival: ['10', 'Survival'], export: ['11', 'Export']
+    circadian: ['07', 'Circadian'], phase: ['08', 'Phase'], stats: ['09', 'Statistics'], survival: ['10', 'Survival'], video: ['11', 'Video'], export: ['12', 'Export']
   };
 
   const state = {
@@ -302,6 +303,7 @@
         else if (name === 'phase' && state.phaseRows.length) renderPhase();
         else if (name === 'stats' && state.metricsRows.length) renderStats();
         else if (name === 'survival' && state.animals.length) renderSurvival();
+        else if (name === 'video') renderVideo();
         else if (name === 'export') updateManifest();
         setTimeout(() => { try { CH.resizeAll(panel); } catch (e) { /* noop */ } }, 140);
       } catch (e) { console.error(e); toast(e.message || String(e), 'error'); }
@@ -1792,6 +1794,440 @@
     state.dirty.survival = false;
   }
 
+  /* ============================ video ============================ */
+  const VID_COLOURS = { active: '#FFC400', asleep: '#00B8E6', inactive: '#9A9A9A', dead: '#5A5A5A', missing: '#5A5A5A', none: '#7A7A7A' };
+  const vid = {
+    source: null, t: 0, playing: false, raf: 0, last: 0, busy: false, pending: false,
+    cal: null, plateKey: '', cells: [], selected: null, stateCache: new WeakMap(), anchors: [],
+    dragging: -1, animalSig: '', traceFor: null, traceCentre: null, cursorBin: -1, cursorFor: null
+  };
+  const vidPlate = () => ({ rows: Math.max(1, +$('vid-rows').value || 8), cols: Math.max(1, +$('vid-cols').value || 12) });
+  // Sync points {t: video seconds, rt: recording seconds}; one point = real time, two or more = piecewise linear.
+  function vidToRuntime(t) {
+    const a = vid.anchors;
+    if (!a.length) return t;
+    if (a.length === 1) return a[0].rt + (t - a[0].t);
+    let i = 0;
+    while (i < a.length - 2 && t > a[i + 1].t) i++;
+    const p = a[i], q = a[i + 1];
+    return p.rt + (t - p.t) * (q.rt - p.rt) / (q.t - p.t);
+  }
+  const vidExpSeconds = () => vidToRuntime(vid.t);
+  const fmtClock = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${(s % 60).toFixed(1).padStart(4, '0')}`;
+
+  function vidLoadCal() {
+    const { rows, cols } = vidPlate();
+    vid.plateKey = `csa_video_cal_${rows}x${cols}`;
+    let cal = null;
+    try { cal = JSON.parse(localStorage.getItem(vid.plateKey) || 'null'); } catch (e) { /* ignore */ }
+    if (!cal || !Array.isArray(cal.corners) || cal.corners.length !== 4) cal = VL.defaultCalibration(rows, cols);
+    vid.cal = cal;
+    $('vid-cell').value = cal.size;
+  }
+  function vidSaveCal() {
+    try { localStorage.setItem(vid.plateKey, JSON.stringify(vid.cal)); } catch (e) { /* ignore */ }
+  }
+  function vidBuildCells() {
+    const { rows, cols } = vidPlate();
+    vid.cells = [];
+    for (const a of state.animals) {
+      const pos = VL.wellPosition(a, rows, cols);
+      if (pos) vid.cells.push({ animal: a, r: pos.r, c: pos.c });
+    }
+  }
+  function vidAnimalSeries(animal) {
+    let cache = vid.stateCache.get(animal);
+    if (!cache) {
+      const st = SL.stateSeries(animal, state.settings);
+      const mask = new Uint8Array(st.length).fill(1);
+      const sd = SL.scoreSleep(st, mask, animal.binMinutes, state.settings.minSleepMinutes ?? 5);
+      cache = { st, sleep: sd.sleep };
+      vid.stateCache.set(animal, cache);
+    }
+    return cache;
+  }
+  function vidBinOf(animal) {
+    const i = Math.floor(vidExpSeconds() / 60 / animal.binMinutes);
+    return i >= 0 && i < animal.activity.length ? i : -1;
+  }
+  function vidStateOf(animal, bin) {
+    if (bin < 0) return 'none';
+    if (animal.deadFrom !== null && animal.deadFrom !== undefined && bin >= animal.deadFrom) return 'dead';
+    const { st, sleep } = vidAnimalSeries(animal);
+    if (st[bin] === 2) return 'missing';
+    if (sleep[bin]) return 'asleep';
+    return st[bin] === 1 ? 'active' : 'inactive';
+  }
+
+  function vidOverlay(ctx, W, H) {
+    const { rows, cols } = vidPlate();
+    const size = VL.cellSize(vid.cal, rows, cols, W, H);
+    const showGrid = $('vid-grid').checked, showLabels = $('vid-labels').checked, colour = $('vid-colour').checked;
+    const lw = Math.max(2, W / 360);
+    ctx.save();
+    ctx.lineWidth = lw;
+    ctx.font = `600 ${Math.max(9, Math.round(size * 0.28))}px sans-serif`;
+    ctx.textBaseline = 'top';
+    const known = new Set(vid.cells.map((c) => `${c.r},${c.c}`));
+    if (showGrid) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        if (known.has(`${r},${c}`)) continue;
+        const [x, y] = VL.wellCentre(vid.cal, rows, cols, r, c, W, H);
+        ctx.strokeRect(x - size / 2, y - size / 2, size, size);
+      }
+    }
+    for (const cell of vid.cells) {
+      const [x, y] = VL.wellCentre(vid.cal, rows, cols, cell.r, cell.c, W, H);
+      const st = vidStateOf(cell.animal, vidBinOf(cell.animal));
+      const col = colour ? VID_COLOURS[st] : 'rgba(255,255,255,0.55)';
+      if (showGrid || colour) {
+        if (colour && (st === 'active' || st === 'asleep')) {
+          ctx.fillStyle = col + '33';
+          ctx.fillRect(x - size / 2, y - size / 2, size, size);
+        }
+        ctx.strokeStyle = col;
+        ctx.strokeRect(x - size / 2, y - size / 2, size, size);
+      }
+      if (showLabels) {
+        const label = String.fromCharCode(65 + cell.r) + (cell.c + 1);
+        ctx.fillStyle = '#000'; ctx.fillText(label, x - size / 2 + 3, y - size / 2 + 3);
+        ctx.fillStyle = '#fff'; ctx.fillText(label, x - size / 2 + 2, y - size / 2 + 2);
+      }
+      if (vid.selected && cell.animal.id === vid.selected) {
+        ctx.strokeStyle = '#FF2D55'; ctx.lineWidth = lw * 2;
+        ctx.strokeRect(x - size / 2 - lw, y - size / 2 - lw, size + 2 * lw, size + 2 * lw);
+        ctx.lineWidth = lw;
+      }
+    }
+    if ($('vid-edit').checked) {
+      vid.cal.corners.forEach(([fx, fy], k) => {
+        ctx.beginPath(); ctx.arc(fx * W, fy * H, W / 60, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,45,85,0.35)'; ctx.fill();
+        ctx.strokeStyle = '#FF2D55'; ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.fillText(['A1', 'A' + cols, String.fromCharCode(64 + rows) + '1', String.fromCharCode(64 + rows) + cols][k], fx * W + W / 55, fy * H - W / 30);
+      });
+    }
+    ctx.restore();
+  }
+
+  function vidCrop(img) {
+    const cv = $('vid-crop');
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const cell = vid.cells.find((c) => c.animal.id === vid.selected);
+    if (!cell) return;
+    const W = vid.source.width, H = vid.source.height;
+    const { rows, cols } = vidPlate();
+    const [x, y] = VL.wellCentre(vid.cal, rows, cols, cell.r, cell.c, W, H);
+    const s = VL.cellSize(vid.cal, rows, cols, W, H) * 1.35;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, x - s / 2, y - s / 2, s, s, 0, 0, cv.width, cv.height);
+  }
+
+  function vidRawWindow(animal, secs, span) {
+    const ds = state.parsedWide;
+    const raw = ds && ds.series && ds.series[animal.key];
+    const times = ds && ds.times;
+    if (raw && times && times.length === raw.length && times[0] instanceof Date) {
+      const t0 = times[0].getTime();
+      const lower = (target) => {
+        let lo = 0, hi = times.length;
+        while (lo < hi) { const mid = (lo + hi) >> 1; if (times[mid].getTime() < target) lo = mid + 1; else hi = mid; }
+        return lo;
+      };
+      const i0 = lower(t0 + (secs - span) * 1000), i1 = lower(t0 + (secs + span) * 1000);
+      const x = [], y = [];
+      for (let i = i0; i < i1; i++) { x.push((times[i].getTime() - t0) / 1000); y.push(C.isNum(raw[i]) ? raw[i] : 0); }
+      return { x, y, resolution: `${fmt(ds.binMinutes * 60, 2)} s` };
+    }
+    const bm = animal.binMinutes;
+    const c = Math.floor(secs / 60 / bm);
+    const nb = Math.ceil(span / 60 / bm);
+    const x = [], y = [];
+    for (let i = Math.max(0, c - nb); i <= Math.min(animal.activity.length - 1, c + nb); i++) { x.push(i * bm * 60); y.push(C.isNum(animal.activity[i]) ? animal.activity[i] : 0); }
+    return { x, y, resolution: `${bm} min` };
+  }
+
+  function vidUpdateTrace(animal, force) {
+    const el = $('vid-trace');
+    const secs = vidExpSeconds();
+    const span = 30;
+    if (force || vid.traceFor !== animal.id || vid.traceCentre === null || Math.abs(secs - vid.traceCentre) > span / 2) {
+      const win = vidRawWindow(animal, secs, span);
+      const layout = CH.baseLayout('', { showlegend: false, height: 230 });
+      layout.margin = { l: 56, r: 16, t: 14, b: 44 };
+      layout.xaxis.title.text = `Runtime (s) · ${win.resolution} resolution`;
+      layout.yaxis.title.text = 'Activity';
+      layout.xaxis.range = [secs - span, secs + span];
+      layout.shapes = [{ type: 'line', xref: 'x', yref: 'paper', x0: secs, x1: secs, y0: 0, y1: 1, line: { color: CH.THEME.accent, width: 2 } }];
+      CH.plot(el, [{ type: 'bar', x: win.x, y: win.y, marker: { color: CH.THEME.bar }, hovertemplate: '%{x:.1f} s<br>%{y:.2f}<extra></extra>' }], layout);
+      vid.traceFor = animal.id;
+      vid.traceCentre = secs;
+    } else if (el._fullLayout) {
+      Plotly.relayout(el, { 'shapes[0].x0': secs, 'shapes[0].x1': secs });
+    }
+  }
+
+  function vidRenderActogram(animal) {
+    const bin = vidBinOf(animal);
+    CH.actogram($('vid-actogram'), animal, { binMin: 30, double: true, scaleMode: 'percentile', cursorBin: bin >= 0 ? bin : null });
+    vid.cursorFor = animal.id;
+    vid.cursorBin = bin;
+  }
+  function vidUpdateCursor(animal) {
+    const bin = vidBinOf(animal);
+    if (bin === vid.cursorBin && vid.cursorFor === animal.id) return;
+    vid.cursorBin = bin;
+    const el = $('vid-actogram');
+    const idx = el.data ? el.data.findIndex((d) => d.name === 'video time') : -1;
+    if (idx < 0) { vidRenderActogram(animal); return; }
+    const cur = bin >= 0 ? CH.actogramCursor(animal, bin, true) : { x: [], y: [] };
+    Plotly.restyle(el, { x: [cur.x], y: [cur.y] }, [idx]);
+  }
+
+  function vidUpdateInfo() {
+    const secs = vidExpSeconds();
+    const src = vid.source;
+    $('vid-clock').textContent = src
+      ? `Video ${fmtClock(vid.t)} / ${fmtClock(src.duration)} · runtime ${secs.toFixed(1)} s (${(secs / 3600).toFixed(2)} h)`
+      : 'No video loaded';
+    const note = $('vid-note');
+    const animal = (state.animals.find((a) => a.id === vid.selected)) || null;
+    let msg = '';
+    if (src && animal && vidBinOf(animal) < 0) {
+      const rec = animal.activity.length * animal.binMinutes / 60;
+      msg = `This video time is outside the recording (${rec.toFixed(2)} h). Add a sync point using the runtime printed on the video.`;
+    } else if (src && !state.animals.length) {
+      msg = 'Analyse a dataset first (steps 01\u201302) to link the wells to the video.';
+    } else if (src && state.animals.length && !vid.cells.length) {
+      msg = 'No animals could be matched to wells. Check the plate rows and columns.';
+    }
+    note.textContent = msg;
+    note.classList.toggle('hidden', !msg);
+    const box = $('vid-details');
+    if (!animal) { box.innerHTML = '<div class="table-empty">Select a well.</div>'; return; }
+    const bin = vidBinOf(animal);
+    const st = vidStateOf(animal, bin);
+    const row = (k, v) => `<tr><th>${esc(k)}</th><td>${v}</td></tr>`;
+    const hasBin = bin >= 0;
+    const stateText = { active: 'Active', asleep: 'Asleep', inactive: 'Inactive (< sleep bout)', dead: 'Dead (no movement)', missing: 'Missing data', none: '\u2014' }[st];
+    box.innerHTML = '<table><tbody>' +
+      row('Animal', esc(animal.id)) + row('Well', esc(animal.well || '\u2014')) +
+      row('Genotype / group', esc(`${animal.genotype || '\u2014'} / ${animal.group || '\u2014'}`)) +
+      row('Behaviour', `<span style="color:${VID_COLOURS[st]}">\u25a0</span> ${stateText}`) +
+      row('Activity in this bin', hasBin ? fmt(animal.activity[bin], 2) : '\u2014') +
+      row('Clock / ZT', hasBin ? `${C.formatClock ? C.formatClock(animal.clock[bin]) : fmt(animal.clock[bin], 2)} / ZT ${fmt(animal.zt[bin], 2)}` : '\u2014') +
+      row('Day / light', hasBin ? `${animal.day[bin]} / ${animal.light[bin] === 1 ? 'light' : animal.light[bin] === 0 ? 'dark' : '\u2014'}` : '\u2014') +
+      '</tbody></table>';
+  }
+
+  async function vidDraw() {
+    const src = vid.source;
+    if (!src) return;
+    const img = await src.frameAt(vid.t);
+    const cv = $('vid-canvas');
+    if (cv.width !== src.width || cv.height !== src.height) { cv.width = src.width; cv.height = src.height; }
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(img, 0, 0, src.width, src.height);
+    vidOverlay(ctx, src.width, src.height);
+    vidCrop(img);
+    vidUpdateInfo();
+    const animal = state.animals.find((a) => a.id === vid.selected);
+    if (animal) { vidUpdateCursor(animal); vidUpdateTrace(animal, false); }
+    const slider = $('vid-slider');
+    if (document.activeElement !== slider) slider.value = src.frameIndex(vid.t);
+    if (src.prefetch) src.prefetch(vid.t, 3);
+  }
+  async function vidRequestDraw() {
+    if (vid.busy) { vid.pending = true; return; }
+    vid.busy = true;
+    try {
+      do { vid.pending = false; await vidDraw(); } while (vid.pending);
+    } catch (e) { console.error(e); toast(e.message || String(e), 'error'); vidPause(); } finally { vid.busy = false; }
+  }
+
+  function vidPause() {
+    vid.playing = false;
+    cancelAnimationFrame(vid.raf);
+    $('btn-vid-play').textContent = 'Play';
+  }
+  function vidPlay() {
+    if (!vid.source) { toast('Load a video first.', 'error'); return; }
+    if (vid.t >= vid.source.duration - 1e-3) vid.t = 0;
+    vid.playing = true;
+    vid.last = performance.now();
+    $('btn-vid-play').textContent = 'Pause';
+    const tick = (now) => {
+      if (!vid.playing) return;
+      vid.t = Math.min(vid.source.duration, vid.t + (now - vid.last) / 1000 * (+$('vid-speed').value || 1));
+      vid.last = now;
+      vidRequestDraw();
+      if (vid.t >= vid.source.duration) { vidPause(); return; }
+      vid.raf = requestAnimationFrame(tick);
+    };
+    vid.raf = requestAnimationFrame(tick);
+  }
+  function vidSeek(t) {
+    if (!vid.source) return;
+    vid.t = Math.max(0, Math.min(vid.source.duration, t));
+    vidRequestDraw();
+  }
+
+  function vidSelect(id, opts = {}) {
+    const animal = state.animals.find((a) => a.id === id);
+    if (!animal) return;
+    vid.selected = id;
+    $('vid-animal').value = id;
+    vid.traceFor = null;
+    vidRenderActogram(animal);
+    if (!opts.noDraw) vidRequestDraw();
+  }
+
+  function vidSetupPlate(force) {
+    if (state.animals.length && (force || !vid.cal)) {
+      const p = VL.detectPlate(state.animals);
+      $('vid-rows').value = p.rows;
+      $('vid-cols').value = p.cols;
+    }
+    vidLoadCal();
+    vidBuildCells();
+  }
+
+  function renderVideo() {
+    vid.stateCache = new WeakMap();
+    const sig = state.animals.map((a) => a.id).join('|');
+    if (sig !== vid.animalSig) {
+      vid.animalSig = sig;
+      $('vid-animal').innerHTML = state.animals.map((a) => `<option value="${esc(a.id)}">${esc(a.well || '')} · ${esc(a.id)} · ${esc(a.genotype || a.group || '')}</option>`).join('');
+      vidSetupPlate(true);
+      if (!state.animals.some((a) => a.id === vid.selected)) vid.selected = state.animals[0] ? state.animals[0].id : null;
+    } else if (!vid.cal) {
+      vidSetupPlate(false);
+    } else {
+      vidBuildCells();
+    }
+    if (vid.selected) vidSelect(vid.selected, { noDraw: true });
+    else { CH.clear($('vid-actogram'), 'Analyse a dataset to see the actogram.'); CH.clear($('vid-trace'), ''); }
+    vidUpdateInfo();
+    vidRenderAnchors();
+    if (vid.source) vidRequestDraw();
+  }
+
+  async function vidLoadFile(file) {
+    vidPause();
+    toast(`Reading ${file.name}\u2026`, 'info');
+    const src = await VL.openVideo(file);
+    if (vid.source) vid.source.close();
+    vid.source = src;
+    vid.t = 0;
+    $('vid-slider').max = Math.max(1, src.nFrames - 1);
+    $('vid-slider').value = 0;
+    const items = [
+      ['File', file.name], ['Size', `${(file.size / 1048576).toFixed(0)} MB`],
+      ['Format', src.kind === 'avi' ? `AVI \u00b7 ${src.codec}` : 'Browser video'],
+      ['Resolution', `${src.width} \u00d7 ${src.height}`], ['Frame rate', `${fmt(src.fps, 2)} fps`],
+      ['Frames', src.nFrames], ['Duration', fmtClock(src.duration)]
+    ];
+    $('vid-info').innerHTML = items.map(([k, v]) => `<div class="info-item"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join('');
+    // Estimate when the video starts from the time stamps in the file names.
+    vid.anchors = [];
+    const vStart = VL.timestampFromName(file.name);
+    const dStart = state.dataset && (state.dataset.startDate || state.dataset.start);
+    if (vStart && dStart instanceof Date) {
+      const d = (vStart - dStart) / 1000;
+      const total = state.dataset.tHours ? state.dataset.tHours[state.dataset.tHours.length - 1] * 3600 : Infinity;
+      if (d >= 0 && d <= total) vid.anchors = [{ t: 0, rt: d, guess: true }];
+    }
+    vidRenderAnchors();
+    renderVideo();
+    toast(`Video loaded: ${src.nFrames} frames.`, 'success');
+  }
+
+  function vidCanvasPoint(ev) {
+    const cv = $('vid-canvas');
+    const r = cv.getBoundingClientRect();
+    return [(ev.clientX - r.left) * cv.width / r.width, (ev.clientY - r.top) * cv.height / r.height];
+  }
+  function vidRenderAnchors() {
+    const el = $('vid-anchors');
+    if (!el) return;
+    if (!vid.anchors.length) { el.textContent = 'No sync points: the video start is taken as the start of the recording.'; return; }
+    el.textContent = 'Sync points: ' + vid.anchors.map((a) => `video ${fmtClock(a.t)} \u2192 runtime ${a.rt.toFixed(1)} s${a.guess ? ' (guessed from file names)' : ''}`).join('; ');
+  }
+  function vidSyncChanged() {
+    vid.traceCentre = null;
+    vid.cursorBin = -1;
+    vidRenderAnchors();
+    const a = state.animals.find((x) => x.id === vid.selected);
+    if (a) vidRenderActogram(a);
+    vidRequestDraw();
+  }
+  function setupVideo() {
+    $('btn-vid-choose').addEventListener('click', () => $('vid-file').click());
+    $('vid-file').addEventListener('click', (e) => { e.target.value = ''; });
+    $('vid-file').addEventListener('change', guard(async (e) => { const f = e.target.files[0]; if (f) await vidLoadFile(f); }));
+    $('btn-vid-play').addEventListener('click', () => (vid.playing ? vidPause() : vidPlay()));
+    const step = (n) => { vidPause(); if (vid.source) vidSeek((vid.source.frameIndex(vid.t) + n) / vid.source.fps + 1e-6); };
+    $('btn-vid-prev').addEventListener('click', () => step(-1));
+    $('btn-vid-next').addEventListener('click', () => step(1));
+    $('vid-slider').addEventListener('input', () => { vidPause(); if (vid.source) vidSeek(+$('vid-slider').value / vid.source.fps + 1e-6); });
+    $('vid-animal').addEventListener('change', () => vidSelect($('vid-animal').value));
+    $('btn-vid-sync').addEventListener('click', () => {
+      const r = parseFloat($('vid-runtime').value);
+      if (!Number.isFinite(r)) { toast('Type the runtime printed on the current video frame.', 'error'); return; }
+      vid.anchors = vid.anchors.filter((a) => !a.guess && Math.abs(a.t - vid.t) > 0.01);
+      vid.anchors.push({ t: vid.t, rt: r });
+      vid.anchors.sort((a, b) => a.t - b.t);
+      vidSyncChanged();
+      toast(vid.anchors.length > 1 ? 'Sync point added.' : 'Sync point added. Add a second one on a later frame for time-lapse videos.', 'success');
+    });
+    $('btn-vid-clear-sync').addEventListener('click', () => { vid.anchors = []; vidSyncChanged(); });
+    ['vid-rows', 'vid-cols'].forEach((id) => $(id).addEventListener('change', () => { vidLoadCal(); vidBuildCells(); vidRequestDraw(); }));
+    $('vid-cell').addEventListener('input', () => { if (!vid.cal) vidLoadCal(); vid.cal.size = +$('vid-cell').value; vidSaveCal(); vidRequestDraw(); });
+    ['vid-colour', 'vid-labels', 'vid-grid', 'vid-edit'].forEach((id) => $(id).addEventListener('change', () => vidRequestDraw()));
+    $('vid-speed').addEventListener('change', () => { vid.last = performance.now(); });
+    $('btn-vid-reset-grid').addEventListener('click', () => {
+      const { rows, cols } = vidPlate();
+      vid.cal = VL.defaultCalibration(rows, cols);
+      $('vid-cell').value = vid.cal.size;
+      vidSaveCal();
+      vidRequestDraw();
+    });
+    $('btn-vid-snapshot').addEventListener('click', () => {
+      if (!vid.source) return;
+      $('vid-canvas').toBlob((b) => b && C.downloadBlob(b, `frame_${vidExpSeconds().toFixed(1)}s.png`));
+    });
+    const cv = $('vid-canvas');
+    cv.addEventListener('pointerdown', (ev) => {
+      if (!vid.source) return;
+      const [x, y] = vidCanvasPoint(ev);
+      const W = cv.width, H = cv.height;
+      if ($('vid-edit').checked && vid.cal) {
+        const k = vid.cal.corners.findIndex(([fx, fy]) => Math.hypot(fx * W - x, fy * H - y) < W / 25);
+        if (k >= 0) { vid.dragging = k; cv.setPointerCapture(ev.pointerId); return; }
+      }
+      const { rows, cols } = vidPlate();
+      const size = VL.cellSize(vid.cal, rows, cols, W, H);
+      let best = null, bestD = size * 0.75;
+      for (const cell of vid.cells) {
+        const [cx, cy] = VL.wellCentre(vid.cal, rows, cols, cell.r, cell.c, W, H);
+        const d = Math.hypot(cx - x, cy - y);
+        if (d < bestD) { best = cell; bestD = d; }
+      }
+      if (best) vidSelect(best.animal.id);
+    });
+    cv.addEventListener('pointermove', (ev) => {
+      if (vid.dragging < 0) return;
+      const [x, y] = vidCanvasPoint(ev);
+      vid.cal.corners[vid.dragging] = [C.clamp(x / cv.width, 0, 1), C.clamp(y / cv.height, 0, 1)];
+      vidRequestDraw();
+    });
+    const endDrag = () => { if (vid.dragging >= 0) { vid.dragging = -1; vidSaveCal(); } };
+    cv.addEventListener('pointerup', endDrag);
+    cv.addEventListener('pointercancel', endDrag);
+  }
+
   /* ============================ export ============================ */
   function survivalCsv() {
     const sv = computeSurvival();
@@ -2158,6 +2594,7 @@
     setupImport();
     setupSettings();
     setupCharts();
+    setupVideo();
     applyTheme(localStorage.getItem('csa_theme_v1') === 'dark' ? 'dark' : 'light', { persist: false });
     updateManifest();
     const hash = (location.hash || '#import').slice(1);
@@ -2170,7 +2607,7 @@
   // Public, read-friendly API for debugging and scripted use.
   window.CSA = {
     state,
-    modules: { Core: C, Stats: S, Importers: I, Sleep: SL, Circadian: CL, Phase: PL, Charts: CH, Sample: SM, Lifespan: LL },
+    modules: { Core: C, Stats: S, Importers: I, Sleep: SL, Circadian: CL, Phase: PL, Charts: CH, Sample: SM, Lifespan: LL, Video: VL },
     analyse: runAll, render: { overview: renderOverview, actograms: renderActograms, profiles: renderProfiles, sleep: renderSleep, circadian: renderCircadian, phase: renderPhase, stats: runStats, survival: renderSurvival },
     exportCsv, exportWorkbook, exportZip, generateReport, runValidation, setSection
   };

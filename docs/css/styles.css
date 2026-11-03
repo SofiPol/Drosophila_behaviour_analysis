@@ -671,3 +671,13 @@ body.dark .progress > i { background: #F5F5F5; }
   .card { border: 1px solid #ccc; break-inside: avoid; }
   .chart { min-height: 360px; }
 }
+
+/* ============================ video ============================ */
+.video-stage { background: #000; line-height: 0; border: 1px solid var(--paper-border); }
+.video-stage canvas { width: 100%; height: auto; display: block; cursor: crosshair; }
+.video-transport { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.video-transport input[type="range"] { flex: 1 1 160px; min-width: 120px; accent-color: hsl(var(--text-primary)); }
+.video-transport label.inline { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+.video-selected { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 14px; align-items: start; margin: 12px 0; }
+.video-selected canvas { width: 200px; height: 200px; background: #000; border: 1px solid var(--paper-border); }
+@media (max-width: 900px) { .video-selected { grid-template-columns: 1fr; } .video-selected canvas { width: 100%; height: auto; } }

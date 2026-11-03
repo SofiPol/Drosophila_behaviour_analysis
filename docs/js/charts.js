@@ -686,7 +686,26 @@
         }
       }
     }
+    if (opts.cursorBin !== undefined && opts.cursorBin !== null) {
+      const cur = actogramCursor(animal, opts.cursorBin, double);
+      traces.push({
+        type: 'scatter', mode: 'markers', x: cur.x, y: cur.y, name: 'video time', showlegend: false, hoverinfo: 'skip',
+        marker: { symbol: 'diamond', size: 11, color: THEME.accent, line: { width: 1.5, color: THEME.paper } }
+      });
+    }
     plot(el, traces, layout, { displayModeBar: false, responsive: true });
+  }
+
+  /** Marker positions for bin `i` of an animal on its (double-plotted) actogram. */
+  function actogramCursor(animal, i, double = true) {
+    const day = animal.day[i], zt = animal.zt[i];
+    if (!C.isNum(day) || !C.isNum(zt)) return { x: [], y: [] };
+    const dayMin = C.min(animal.day.filter((v) => C.isNum(v)));
+    const row = day - dayMin;
+    const t = ((zt % 24) + 24) % 24;
+    const x = [t], y = [row - 0.3];
+    if (double && row > 0) { x.push(t + 24); y.push(row - 1 - 0.3); }
+    return { x, y };
   }
 
   function averageActogram(el, animals, opts = {}) {
@@ -1188,7 +1207,7 @@
   global.Charts = {
     THEME, baseLayout, plot, clear, darkFractions, darkIntervalShapes,
     profileChart, activityProfileChart, sleepArchitectureChart, transitionChart, sleepCategoryChart, circularChart,
-    actogramMatrix, actogram, averageActogram, sleepActogram, actogramScaling,
+    actogramMatrix, actogram, actogramCursor, averageActogram, sleepActogram, actogramScaling,
     rasterChart, periodogramChart, periodDistributionChart, autocorrelationChart,
     boxPlot, barSummaryChart, timelineChart, histogramChart, multiBoxPlot,
     populationChart, profileComparisonChart, survivalChart, aliveAtEndChart,

@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
-<link rel="icon" type="image/svg+xml" href="assets/insect-mark.svg?v=2.6.2">
-<link rel="stylesheet" href="css/styles.css?v=2.6.2">
+<link rel="icon" type="image/svg+xml" href="assets/insect-mark.svg?v=2.7.2">
+<link rel="stylesheet" href="css/styles.css?v=2.7.2">
 </head>
 <body>
 <div class="app-shell">
@@ -47,7 +47,8 @@
     <button class="step" data-section="phase" type="button"><span>08</span>Phase</button>
     <button class="step" data-section="stats" type="button"><span>09</span>Statistics</button>
     <button class="step" data-section="survival" type="button"><span>10</span>Survival</button>
-    <button class="step" data-section="export" type="button"><span>11</span>Export</button>
+    <button class="step" data-section="video" type="button"><span>11</span>Video</button>
+    <button class="step" data-section="export" type="button"><span>12</span>Export</button>
   </nav>
 
   <div class="scope-strip hidden" id="scope-strip">
@@ -82,7 +83,7 @@
           <p class="privacy-note">Nothing is uploaded to a server. The page runs entirely client-side.</p>
         </div>
         <figure class="hero-figure" aria-hidden="true">
-          <img class="hero-figure-insect" src="assets/insect-drawing.png?v=2.6.2" alt="">
+          <img class="hero-figure-insect" src="assets/insect-drawing.png?v=2.7.2" alt="">
           <figcaption><span>one animal</span><span>every rhythm</span></figcaption>
         </figure>
       </div>
@@ -559,11 +560,71 @@
     </section>
 
     <!-- ============================================================ -->
-    <!-- 11 EXPORT                                                    -->
+    <!-- 11 VIDEO                                                     -->
+    <!-- ============================================================ -->
+    <section class="panel" id="sec-video">
+      <div class="section-head">
+        <div><p class="eyebrow">11 · Video</p><h2 class="display">Watch the behaviour.</h2></div>
+        <button class="btn primary" id="btn-vid-choose" type="button">Load Zantiks video</button>
+        <input type="file" id="vid-file" hidden accept=".avi,.mp4,.m4v,.mov,.webm,video/*">
+      </div>
+      <article class="card">
+        <p class="small muted">Load the video exported by Zantiks (MJPEG <code>.avi</code>, or MP4/WebM). It stays on your computer and is read frame by frame. Each well is linked to its animal, so the video, the activity and the actogram move together. Analyse a dataset first (steps 01–02).</p>
+        <p class="small muted"><strong>Syncing.</strong> Zantiks prints the runtime on every frame (bottom of the image). Pause on a frame, type that runtime and press "Add sync point". One point assumes the video plays in real time; add a second point on a later frame if the video is a time-lapse (for example one frame every 10 s of the recording). The runtime the app computes is shown above the plate so you can compare it with the printed one.</p>
+        <div class="info-grid" id="vid-info"></div>
+        <div class="controls">
+          <label>Runtime printed on this frame (s)<input type="number" id="vid-runtime" placeholder="e.g. 3360.327" step="any"></label>
+          <button class="btn ghost small" id="btn-vid-sync" type="button">Add sync point at this frame</button>
+          <button class="btn ghost small" id="btn-vid-clear-sync" type="button">Clear sync points</button>
+          <label>Plate rows<input type="number" id="vid-rows" value="8" min="1" max="16"></label>
+          <label>Plate columns<input type="number" id="vid-cols" value="12" min="1" max="24"></label>
+          <label>Cell size<input type="range" id="vid-cell" min="0.4" max="1.3" step="0.05" value="0.9"></label>
+        </div>
+        <div class="controls">
+          <label class="check-label"><input type="checkbox" id="vid-colour" checked> Colour wells by behaviour</label>
+          <label class="check-label"><input type="checkbox" id="vid-labels" checked> Well labels</label>
+          <label class="check-label"><input type="checkbox" id="vid-grid" checked> Well grid</label>
+          <label class="check-label"><input type="checkbox" id="vid-edit"> Adjust grid (drag the 4 corner handles)</label>
+          <button class="btn ghost small" id="btn-vid-reset-grid" type="button">Reset grid</button>
+        </div>
+        <p class="small" id="vid-anchors"></p>
+        <p class="small hidden" id="vid-note"></p>
+        <p class="small muted">The corner handles mark the centres of the first and last well of the first and last rows (A1, A12, H1, H12 on a 96-well plate). Wells are coloured <span style="color:#d99a00">active</span>, <span style="color:#00a3cc">asleep</span>, <span style="color:#8a8a8a">inactive / dead / no data</span>.</p>
+      </article>
+      <div class="grid-2 video-grid">
+        <article class="card">
+          <header class="card-head"><span class="card-index">A</span><div><h3>Plate</h3><p id="vid-clock">No video loaded</p></div><button class="btn tiny ghost" id="btn-vid-snapshot" type="button">Save frame</button></header>
+          <div class="video-stage"><canvas id="vid-canvas" width="720" height="540"></canvas></div>
+          <div class="video-transport">
+            <button class="btn small" id="btn-vid-play" type="button">Play</button>
+            <button class="btn ghost small" id="btn-vid-prev" type="button">◀ Frame</button>
+            <button class="btn ghost small" id="btn-vid-next" type="button">Frame ▶</button>
+            <label class="inline">Speed<select id="vid-speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+            <input type="range" id="vid-slider" min="0" max="1" step="1" value="0">
+          </div>
+        </article>
+        <article class="card">
+          <header class="card-head"><span class="card-index">B</span><div><h3>Selected animal</h3><p>Click a well on the plate, or choose an animal.</p></div></header>
+          <div class="controls"><label>Animal<select id="vid-animal"></select></label></div>
+          <div class="video-selected">
+            <canvas id="vid-crop" width="240" height="240"></canvas>
+            <div class="table-wrap" id="vid-details"></div>
+          </div>
+          <div class="chart" id="vid-trace" style="min-height:230px"></div>
+        </article>
+      </div>
+      <article class="card">
+        <header class="card-head"><span class="card-index">C</span><div><h3>Actogram of the selected animal</h3><p>The red diamond follows the video time.</p></div><button class="btn tiny ghost" data-export="vid-actogram" type="button">Export</button></header>
+        <div class="chart actogram-profile" id="vid-actogram"></div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 12 EXPORT                                                    -->
     <!-- ============================================================ -->
     <section class="panel" id="sec-export">
       <div class="section-head">
-        <div><p class="eyebrow">11 · Export</p><h2 class="display">Take it with you.</h2></div>
+        <div><p class="eyebrow">12 · Export</p><h2 class="display">Take it with you.</h2></div>
       </div>
       <div class="grid-2">
         <article class="card">
@@ -626,9 +687,10 @@
       <a href="#phase" data-goto="phase"><span>08</span>Phase</a>
       <a href="#stats" data-goto="stats"><span>09</span>Statistics</a>
       <a href="#survival" data-goto="survival"><span>10</span>Survival</a>
-      <a href="#export" data-goto="export"><span>11</span>Export</a>
+      <a href="#video" data-goto="video"><span>11</span>Video</a>
+      <a href="#export" data-goto="export"><span>12</span>Export</a>
     </div>
-<div class="footer-meta"><span>Chronobiology Workbench v2.6.2</span><span>Client-side · no data leaves your browser</span></div>
+<div class="footer-meta"><span>Chronobiology Workbench v2.7.2</span><span>Client-side · no data leaves your browser</span></div>
   </footer>
 </div>
 
@@ -654,15 +716,16 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/sql-wasm.js"></script>
-<script src="js/core.js?v=2.6.2"></script>
-<script src="js/stats.js?v=2.6.2"></script>
-<script src="js/importers.js?v=2.6.2"></script>
-<script src="js/sleep.js?v=2.6.2"></script>
-<script src="js/circadian.js?v=2.6.2"></script>
-<script src="js/phase.js?v=2.6.2"></script>
-<script src="js/lifespan.js?v=2.6.2"></script>
-<script src="js/charts.js?v=2.6.2"></script>
-<script src="js/sample.js?v=2.6.2"></script>
-<script src="js/app.js?v=2.6.2"></script>
+<script src="js/core.js?v=2.7.2"></script>
+<script src="js/stats.js?v=2.7.2"></script>
+<script src="js/importers.js?v=2.7.2"></script>
+<script src="js/sleep.js?v=2.7.2"></script>
+<script src="js/circadian.js?v=2.7.2"></script>
+<script src="js/phase.js?v=2.7.2"></script>
+<script src="js/lifespan.js?v=2.7.2"></script>
+<script src="js/video.js?v=2.7.2"></script>
+<script src="js/charts.js?v=2.7.2"></script>
+<script src="js/sample.js?v=2.7.2"></script>
+<script src="js/app.js?v=2.7.2"></script>
 </body>
 </html>
