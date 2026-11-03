@@ -570,7 +570,7 @@
       <div class="mapping-row"><label style="grid-column:1/-1">Animal columns (wide; use Ctrl/Cmd to select multiple)<select id="map-wide" multiple class="multi-select">${wideOpts}</select></label></div>
       <button class="btn ghost small" id="btn-apply-mapping" type="button">Apply mapping</button>`;
     } else if (w.format === 'zantiks') {
-      html += `<p class="preview-note">Detected Zantiks wells: ${esc((w.keys || []).join(', '))}. The original values are displayed; conversion to standard DAM multiplies distance by 1000 and writes 32 channels.</p>`;
+      html += `<p class="preview-note">Detected Zantiks wells: ${esc((w.keys || []).join(', '))}. The original values are displayed; conversion to standard DAM multiplies distance by 1000 and writes one channel per well (minimum 32).</p>`;
       $('btn-download-dam').classList.remove('hidden');
     } else if (w.format === 'dam') {
       html += `<p class="preview-note">Detected ${w.keys.length} channels. The light column is read automatically; empty channels can be excluded on the next step.</p>`;

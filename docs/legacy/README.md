@@ -40,7 +40,7 @@ documents.
 
 | Tab | What it does |
 |-----|--------------|
-| 1 · Data Conversion | Parses Zantiks header (`Execution start`, experiment, apparatus, unit), 24 channels (A1–D6), converts to the 42-column DAM tab-separated format (`round(distance × 1000)` scaling, light status, zero-padded channels 25–32). |
+| 1 · Data Conversion | Parses Zantiks header (`Execution start`, experiment, apparatus, unit), 24 wells (A1–D6) or 96 wells (A1–H12), converts to the tab-separated DAM format (10 metadata columns + one channel per well, zero-padded to at least 32; `round(distance × 1000)` scaling, light status). |
 | 2 · Metadata Manager | Validates the 10 required columns, cross-checks `well` ⇄ `region_id`, datetime windows and missing values; interactive editable table; links metadata to the DAM channels. |
 | 3 · Actograms | Individual (per fly) and average-group tile heatmaps; 1/5/15/30/60-min binning; Viridis/Magma/Plasma/Standard colour maps. |
 | 4 · Sleep & Activity Profiles | Whole-experiment activity trajectory, 24-h wrapped sleep (fraction asleep) and activity profiles with automatic LD/dark shading; LD (entrainment) vs DD (free-running) vs all-days phase selection. |
@@ -86,10 +86,10 @@ docs/
 
 ## Using real data
 
-1. **Zantiks CSV** — must contain the 4 `Info` header rows and a `RUNTIME,UNIT,TEMPERATURE,L_OR_D,DAY,HOUR,TIME_BIN,A1..D6` header, with `A1`–`D6` activity columns.
+1. **Zantiks CSV** — must contain the 4 `Info` header rows and a `RUNTIME,UNIT,TEMPERATURE,L_OR_D,DAY,HOUR,TIME_BIN,A1..` header, with `A1`–`D6` (24-well) or `A1`–`H12` (96-well) activity columns.
 2. **Metadata CSV** — columns (order-independent):
    `file, start_datetime, stop_datetime, region_id, well, genotype, sex, replicate, exp, observations`.
-   - `region_id` = channel (1–24), `well` = plate coordinate (A1–D6).
+   - `region_id` = channel (1–24, or 1–96), `well` = plate coordinate (A1–D6, or A1–H12; numbered row by row).
    - `start_datetime` / `stop_datetime` define each fly's analysis window (`YYYY-MM-DD HH:MM:SS`
      or `DD/MM/YYYY HH:MM:SS`).
    - `observations` can be used to include/exclude animals (`alive`/`dead`); all rows are

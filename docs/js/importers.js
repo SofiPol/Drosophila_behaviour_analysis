@@ -258,8 +258,8 @@
     }
     if (headerRow < 0) throw new Error('Could not find the Zantiks RUNTIME header row.');
     const header = splitCsvLine(lines[headerRow]).map((c) => String(c).trim());
-    const activityCols = header.filter((h) => /^[A-H][1-9]$/i.test(h));
-    if (!activityCols.length) throw new Error('No Zantiks wells (A1…D6) found in the header.');
+    const activityCols = header.filter((h) => /^[A-H](?:[1-9]|1[0-2])$/i.test(h));
+    if (!activityCols.length) throw new Error('No Zantiks wells (A1…H12) found in the header.');
     const index = {};
     header.forEach((h, i) => { index[h] = i; });
     const runtimeIdx = header.findIndex((h) => /^RUNTIME$/i.test(h));
@@ -278,6 +278,7 @@
       const line = lines[r];
       if (!line || line.length < 3) continue;
       const cells = splitCsvLine(line);
+      if (/^info$/i.test(String(cells[1]).trim())) continue;
       const rt = Number(cells[runtimeIdx]);
       if (!Number.isFinite(rt)) continue;
       runtime.push(rt);
@@ -325,7 +326,7 @@
 
   /**
    * Convert a parsed Zantiks dataset into a standard DAM text file
-   * (5 metadata columns + 32 channels).
+   * (5 metadata columns + at least 32 channels; one per well for 96-well plates).
    */
   function zantiksToDam(z) {
     const pad = (v) => String(v).padStart(2, '0');
@@ -337,7 +338,8 @@
       const date = `${pad(d.getDate())} ${months[d.getMonth()]} ${pad(d.getFullYear() % 100)}`;
       const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
       const vals = [];
-      for (let c = 0; c < 32; c++) {
+      const nOut = Math.max(32, z.keys.length);
+      for (let c = 0; c < nOut; c++) {
         if (c < z.keys.length) {
           const v = z.series[z.keys[c]][i];
           vals.push(String(Number.isFinite(v) ? Math.round(v * 1000) : 0));

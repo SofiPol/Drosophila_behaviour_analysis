@@ -84,11 +84,13 @@ window.ZMetadata = (function () {
       }
     }
 
+    const maxCh = dam && dam.channels ? dam.channels : 96;
+    const cols = C.plateCols(rows.map((r) => r.well), maxCh);
     const seenWells = new Set();
     rows.forEach((r, i) => {
       const at = i + 2; // 1-based row incl. header
       if (r.well && r.region_id) {
-        const ch = C.wellToChannel(r.well);
+        const ch = C.wellToChannel(r.well, cols);
         if (ch !== null && ch !== parseInt(r.region_id, 10)) {
           issues.push({ severity: 'warning', row: at, msg: `Row ${at}: well ${r.well} maps to channel ${ch} but region_id is ${r.region_id}` });
         }
@@ -107,8 +109,8 @@ window.ZMetadata = (function () {
       const ch = parseInt(r.region_id, 10);
       if (r.region_id === '') {
         issues.push({ severity: 'info', row: at, msg: `Row ${at}: no region_id (NA) — row will be skipped` });
-      } else if (!Number.isInteger(ch) || ch < 1 || ch > 24) {
-        issues.push({ severity: 'error', row: at, msg: `Row ${at}: region_id "${r.region_id}" not a valid channel (1-24)` });
+      } else if (!Number.isInteger(ch) || ch < 1 || ch > maxCh) {
+        issues.push({ severity: 'error', row: at, msg: `Row ${at}: region_id "${r.region_id}" not a valid channel (1-${maxCh})` });
       } else {
         if (seenWells.has(r.well)) {
           issues.push({ severity: 'warning', row: at, msg: `Row ${at}: duplicate well ${r.well}` });
@@ -144,7 +146,7 @@ window.ZMetadata = (function () {
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const ch = parseInt(r.region_id, 10);
-      if (!Number.isInteger(ch) || ch < 1 || ch > 32) continue;
+      if (!Number.isInteger(ch) || ch < 1 || ch > 96) continue;
       if (observationsFilter && r.observations && r.observations !== observationsFilter) continue;
 
       let targetDam = defaultDam;
@@ -190,7 +192,7 @@ window.ZMetadata = (function () {
       flies.push({
         id,
         file: flyFile,
-        well: r.well || C.channelToWell(ch) || ('ch' + ch),
+        well: r.well || C.channelToWell(ch, targetDam.channels > 32 ? 12 : 6) || ('ch' + ch),
         regionId: ch,
         genotype: r.genotype || 'CTRL',
         sex: r.sex || 'NA',

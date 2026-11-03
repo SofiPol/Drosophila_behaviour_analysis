@@ -8,18 +8,29 @@ window.ZConverter = (function () {
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  /* ---------------- Well ⇄ channel mapping (A1..D6 → 1..24) ---------------- */
-  function wellToChannel(well) {
-    const m = /^([A-Da-d])([1-6])$/.exec(String(well || '').trim());
-    if (!m) return null;
-    const rowIdx = m[1].toUpperCase().charCodeAt(0) - 65; // A=0..D=3
-    return rowIdx * 6 + parseInt(m[2], 10);
+  /* ---------------- Well ⇄ channel mapping (24-well A1..D6 or 96-well A1..H12, row-major) ---------------- */
+  // Returns 12 (96-well plate) or 6 (24-well plate) columns per row.
+  function plateCols(wells, nChannels) {
+    if (nChannels > 32) return 12;
+    for (const w of wells || []) {
+      const m = /^([A-Ha-h])(\d{1,2})$/.exec(String(w || '').trim());
+      if (m && (parseInt(m[2], 10) > 6 || m[1].toUpperCase() > 'D')) return 12;
+    }
+    return 6;
   }
-  function channelToWell(ch) {
+  function wellToChannel(well, cols = 6) {
+    const m = /^([A-Ha-h])(\d{1,2})$/.exec(String(well || '').trim());
+    if (!m) return null;
+    const col = parseInt(m[2], 10);
+    const rowIdx = m[1].toUpperCase().charCodeAt(0) - 65;
+    if (col < 1 || col > cols || rowIdx >= (cols === 12 ? 8 : 4)) return null;
+    return rowIdx * cols + col;
+  }
+  function channelToWell(ch, cols = 6) {
     ch = parseInt(ch, 10);
-    if (ch < 1 || ch > 24) return null;
-    const row = String.fromCharCode(65 + Math.floor((ch - 1) / 6));
-    const col = ((ch - 1) % 6) + 1;
+    if (!(ch >= 1) || ch > (cols === 12 ? 96 : 24)) return null;
+    const row = String.fromCharCode(65 + Math.floor((ch - 1) / cols));
+    const col = ((ch - 1) % cols) + 1;
     return row + col;
   }
 
@@ -155,7 +166,7 @@ window.ZConverter = (function () {
     }
 
     const header = splitCsvLine(lines[headerLineIdx]).map((h) => h.trim());
-    const activityCols = header.filter((h) => /^[A-D][1-6]$/i.test(h));
+    const activityCols = header.filter((h) => /^[A-H](?:[1-9]|1[0-2])$/i.test(h));
     // precompute column indices once (fast for very large files)
     const colIndex = {};
     for (let i = 0; i < header.length; i++) colIndex[header[i]] = i;
@@ -164,7 +175,7 @@ window.ZConverter = (function () {
     const rows = [];
     for (let i = headerLineIdx + 1; i < lines.length; i++) {
       const cells = splitCsvLine(lines[i]);
-      if (cells.length < 8) continue;
+      if (cells.length < 8 || cells[1] === 'Info') continue;
       const row = {
         runtime: parseFloat(cells[0]),
         unit: cells[1],
@@ -182,12 +193,12 @@ window.ZConverter = (function () {
       rows.push(row);
     }
 
-    return { info, columns: header, activityCols, rows };
+    return { info, columns: header, activityCols, rows, plateCols: plateCols(activityCols, activityCols.length) };
   }
 
   /* ---------------- Zantiks → DAM conversion ---------------- */
   /**
-   * Builds the 42-column tab-separated DAM text file.
+   * Builds the tab-separated DAM text file: 10 metadata columns + max(32, n wells) channels.
    * @param {object} parsed result of parseZantiksCsv
    * @returns {string}
    */
@@ -207,13 +218,11 @@ window.ZConverter = (function () {
         '0', '1', '0',      // cols 5-7 control flags
         '0', '0', '0'       // cols 8-10 environment
       ];
-      // channels 1-24 (scaled: round(distance * 1000))
+      // one channel per well (scaled: round(distance * 1000)), zero padded to 32
       for (const v of r.channels) {
         cols.push(String(Math.round((Number.isFinite(v) ? v : 0) * 1000)));
       }
-      // channels 25-32 zero padded
-      for (let c = r.channels.length; c < 24; c++) cols.push('0');
-      for (let c = 24; c < 32; c++) cols.push('0');
+      for (let c = r.channels.length; c < 32; c++) cols.push('0');
       lines.push(cols.join('\t'));
     }
     return lines.join('\n') + '\n';
@@ -231,7 +240,7 @@ window.ZConverter = (function () {
       const cells = line.split(/\t+/);
       if (cells.length < 34) continue;
       const channels = [];
-      for (let c = 10; c < 34; c++) {
+      for (let c = 10; c < cells.length; c++) {
         channels.push(parseInt(cells[c], 10) || 0);
       }
       rows.push({
@@ -251,13 +260,17 @@ window.ZConverter = (function () {
         if (!end || r.timestamp > end) end = r.timestamp;
       }
     }
+    let nCh = rows.length ? Math.max(...rows.slice(0, 200).map((r) => r.channels.length)) : 24;
+    // Converted 24-well files are zero padded to 32 channels; report the real 24.
+    if (nCh === 32 && rows.every((r) => r.channels.slice(24).every((v) => v === 0))) nCh = 24;
+    for (const r of rows) r.channels.length = nCh;
     return {
       file: filename || 'DAM_file.txt',
       nRows: rows.length,
       startDatetime: start,
       endDatetime: end,
       rows,
-      channels: 24,
+      channels: nCh,
       binMinutes: inferBinMinutes(rows)
     };
   }
@@ -315,7 +328,7 @@ window.ZConverter = (function () {
   }
 
   return {
-    wellToChannel, channelToWell,
+    wellToChannel, channelToWell, plateCols,
     parseDatetimeRobust,
     parseZantiksCsv,
     convertToDam,

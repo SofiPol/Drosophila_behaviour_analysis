@@ -139,11 +139,12 @@
       state.zantiksName = loadedNames.join(', ');
 
       const totalMonitors = Object.keys(state.dams).length;
-      $('dam-badge').textContent = totalMonitors + ' Monitor File(s) · ' + (totalMonitors * 24) + ' Channels Total';
+      const totalChannels = Object.values(state.dams).reduce((s, d) => s + d.channels, 0);
+      $('dam-badge').textContent = totalMonitors + ' Monitor File(s) · ' + totalChannels + ' Channels Total';
       $('dam-summary').textContent = `Multi-Monitor Mode: Loaded ${totalMonitors} DAM Monitor file(s) [${loadedNames.join(', ')}] · Total ~${totalRows} rows across monitors. Ready for metadata manager!`;
 
       const lines = state.damText.trim().split('\n').slice(0, 10);
-      const head = ['Index', 'Date', 'Time', 'Light', ...Array.from({ length: 24 }, (_, i) => 'Ch' + (i + 1))];
+      const head = ['Index', 'Date', 'Time', 'Light', ...Array.from({ length: state.dam.channels }, (_, i) => 'Ch' + (i + 1))];
       const body = lines.map((l) => l.split('\t'));
       const tbl = $('dam-preview-table');
       tbl.innerHTML = '<thead><tr>' + head.map((h) => `<th>${h}</th>`).join('') + '</tr></thead><tbody>' +
@@ -199,7 +200,7 @@
         const vals = parsed.rows.map((r) => r.channels[wells.indexOf(w)]);
         const nonzero = vals.filter((v) => v > 0).length;
         return {
-          well: w, ch: C.wellToChannel(w), min: M.min(vals), mean: M.mean(vals), max: M.max(vals),
+          well: w, ch: C.wellToChannel(w, parsed.plateCols), min: M.min(vals), mean: M.mean(vals), max: M.max(vals),
           active: fmt(100 * nonzero / vals.length, 1) + '%'
         };
       });
@@ -228,14 +229,14 @@
     try {
       state.damText = C.convertToDam(state.zantiks);
       state.dam = C.parseDam(state.damText, 'DAM_file.txt');
-      // render preview (first 10 rows, cols: index/date/time/light + 24 channels)
+      // render preview (first 10 rows, cols: index/date/time/light + channels)
       const lines = state.damText.trim().split('\n').slice(0, 10);
-      const head = ['Index', 'Date', 'Time', 'Light', ...Array.from({ length: 24 }, (_, i) => 'Ch' + (i + 1))];
+      const head = ['Index', 'Date', 'Time', 'Light', ...Array.from({ length: state.dam.channels }, (_, i) => 'Ch' + (i + 1))];
       const body = lines.map((l) => l.split('\t'));
       const tbl = $('dam-preview-table');
       tbl.innerHTML = '<thead><tr>' + head.map((h) => `<th>${h}</th>`).join('') + '</tr></thead><tbody>' +
         body.map((r) => '<tr>' + r.map((c, i) => `<td class="${i >= 4 ? 'num' : ''}">${c}</td>`).join('') + '</tr>').join('') + '</tbody>';
-      $('dam-badge').textContent = state.dam.nRows + ' rows × 24 channels';
+      $('dam-badge').textContent = state.dam.nRows + ' rows × ' + state.dam.channels + ' channels';
       $('dam-summary').textContent = `Start ${state.dam.startDatetime ? state.dam.startDatetime.toLocaleString() : '—'} · End ${state.dam.endDatetime ? state.dam.endDatetime.toLocaleString() : '—'} · ${fmt((state.dam.endDatetime - state.dam.startDatetime) / 3600000, 1)} h · ${fmtBin(state.dam.binMinutes)} bins`;
       $('dam-result-card').classList.remove('hidden');
       setWorkflow(2);
@@ -335,7 +336,7 @@
         infoGrid($('linked-info'), [
           { k: 'Flies linked', v: flies.length },
           { k: 'Genotypes', v: genotypes.join(', ') },
-          { k: 'Wells', v: flies.length + ' / 24 used' },
+          { k: 'Wells', v: flies.length + ' / ' + state.dam.channels + ' used' },
           { k: 'Sleep definition', v: '≥5 min inactivity' },
           { k: 'Bin size', v: fmtBin(flies[0].binMin) + (agg ? ' (aggregated)' : '') },
           { k: 'Recorded', v: fmt(flies[0].tHours[flies[0].tHours.length - 1] / 24, 1) + ' days' }
