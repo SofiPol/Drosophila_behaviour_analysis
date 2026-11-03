@@ -75,7 +75,7 @@
       reboundBaseline: '', reboundDeprivation: '', reboundRecovery: '',
       errorBars: 'sem', normalise: 'none', timeBase: 'ZT', actogramBin: 30,
       actogramScale: 'percentile', doubleActogram: true,
-      survDeadHours: 24, survThreshold: 0, survStartAge: 0, survGroupBy: 'genotype', survPermanent: true, survCi: true, survCorrection: 'holm'
+      survDeadHours: 24, survThreshold: 0, survStartAge: 0, survGroupBy: 'genotype', survPermanent: true, survCi: true, survCorrection: 'holm', survNeverActiveDead: true
     };
   }
 
@@ -1716,6 +1716,7 @@
     $('surv-groupvar').value = s.survGroupBy;
     $('surv-correction').value = s.survCorrection;
     $('surv-permanent').checked = !!s.survPermanent;
+    $('surv-never').checked = !!s.survNeverActiveDead;
     $('surv-ci').checked = !!s.survCi;
   }
   function readSurvivalUI() {
@@ -1726,13 +1727,14 @@
     s.survGroupBy = $('surv-groupvar').value;
     s.survCorrection = $('surv-correction').value;
     s.survPermanent = $('surv-permanent').checked;
+    s.survNeverActiveDead = $('surv-never').checked;
     s.survCi = $('surv-ci').checked;
     saveSettings();
   }
   function computeSurvival() {
     const s = state.settings;
     state.survival = LL.analyse(state.animals, {
-      deadHours: s.survDeadHours, threshold: s.survThreshold, permanent: s.survPermanent,
+      deadHours: s.survDeadHours, threshold: s.survThreshold, permanent: s.survPermanent, neverActiveDead: s.survNeverActiveDead,
       startAgeDays: s.survStartAge, groupBy: s.survGroupBy, correction: s.survCorrection
     });
     return state.survival;
@@ -1746,6 +1748,15 @@
     const dead = scored.filter((r) => r.event);
     const excluded = sv.rows.length - scored.length;
     const allCurve = LL.kaplanMeier(scored.map((r) => ({ time: r.time, event: r.event })));
+    const recHours = (C.max(sv.rows.map((r) => r.recorded).filter(C.isNum)) - sv.startAge) * 24;
+    const shortRec = C.isNum(recHours) && recHours < state.settings.survDeadHours;
+    const note = $('surv-note');
+    if (note) {
+      note.textContent = shortRec
+        ? `The recording is only ${fmt(recHours, 1)} h, shorter than the ${state.settings.survDeadHours} h inactivity period, so deaths cannot be scored. Lower "Dead after no movement" or use a longer recording.`
+        : (excluded ? `${excluded} animal(s) were not scored: ${C.unique(sv.rows.filter((r) => r.status === 'excluded').map((r) => r.note)).join('; ')}.` : '');
+      note.classList.toggle('hidden', !note.textContent);
+    }
     kpiGrid('surv-kpis', [
       { k: 'Animals scored', v: scored.length, s: excluded ? `${excluded} excluded (no data / never active)` : `${sv.labels.length} group${sv.labels.length === 1 ? '' : 's'}` },
       { k: 'Dead', v: dead.length, s: `no movement ≥ ${state.settings.survDeadHours} h` },
@@ -2117,7 +2128,7 @@
     $('btn-render-phase').addEventListener('click', guard(renderPhase));
     $('btn-run-stats').addEventListener('click', guard(() => runStats(true)));
     $('btn-run-survival').addEventListener('click', guard(renderSurvival));
-    ['surv-dead-hours', 'surv-threshold', 'surv-start-age', 'surv-groupvar', 'surv-correction', 'surv-permanent', 'surv-ci']
+    ['surv-dead-hours', 'surv-threshold', 'surv-start-age', 'surv-groupvar', 'surv-correction', 'surv-permanent', 'surv-never', 'surv-ci']
       .forEach((id) => $(id).addEventListener('change', guard(renderSurvival)));
     $('btn-export-survival').addEventListener('click', () => exportCsv('survival'));
     $('btn-export-survival-summary').addEventListener('click', () => exportCsv('survivalsummary'));

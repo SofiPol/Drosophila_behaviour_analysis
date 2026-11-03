@@ -10,7 +10,7 @@
    * Score one animal as dead or censored from its activity trace.
    * Death time is the start of the immobility run (the last movement).
    * @param {object} animal assembled animal (activity, binMinutes)
-   * @param {object} opts { deadHours, threshold, permanent }
+   * @param {object} opts { deadHours, threshold, permanent, neverActiveDead }
    * @returns {{status:string, event:boolean, hours:number, recordedHours:number, note:string}}
    */
   function scoreAnimal(animal, opts = {}) {
@@ -30,7 +30,13 @@
     }
     if (last < 0) return { status: 'excluded', event: false, hours: NaN, recordedHours: 0, note: 'no data' };
     const recordedHours = (last + 1) * binH;
-    if (!anyMove) return { status: 'excluded', event: false, hours: NaN, recordedHours, note: 'never active (empty well?)' };
+    if (!anyMove) {
+      if (opts.neverActiveDead !== false && recordedHours >= deadHours) {
+        return { status: 'dead', event: true, hours: 0, recordedHours, note: 'no movement since the start of the recording' };
+      }
+      const why = recordedHours < deadHours ? `recording (${recordedHours.toFixed(1)} h) is shorter than ${deadHours} h` : 'no movement (not scored)';
+      return { status: 'excluded', event: false, hours: NaN, recordedHours, note: why };
+    }
 
     const deadBins = Math.max(1, Math.round(deadHours / binH));
     let deathIndex = -1;
