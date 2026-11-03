@@ -1067,6 +1067,42 @@
     plot(el, traces, layout);
   }
 
+  /* ============================ survival ============================ */
+  function survivalChart(el, curves, opts = {}) {
+    if (!curves || !curves.length) { clear(el, 'No survival data.'); return; }
+    const traces = [];
+    curves.forEach((cv, gi) => {
+      const col = C.groupColor(gi);
+      const x = cv.steps.map((s) => s.t);
+      const name = `${cv.label} (n=${cv.n})`;
+      if (opts.ci !== false) {
+        const h = /^#([0-9a-f]{6})$/i.exec(col);
+        const band = h ? `rgba(${parseInt(h[1].slice(0, 2), 16)},${parseInt(h[1].slice(2, 4), 16)},${parseInt(h[1].slice(4, 6), 16)},0.16)` : 'rgba(128,128,128,0.16)';
+        traces.push({ x, y: cv.steps.map((s) => s.hi * 100), mode: 'lines', line: { width: 0, shape: 'hv' }, hoverinfo: 'skip', showlegend: false, legendgroup: cv.label });
+        traces.push({ x, y: cv.steps.map((s) => s.lo * 100), mode: 'lines', line: { width: 0, shape: 'hv' }, fill: 'tonexty', fillcolor: band, hoverinfo: 'skip', showlegend: false, legendgroup: cv.label });
+      }
+      traces.push({
+        x, y: cv.steps.map((s) => s.S * 100), mode: 'lines', name, legendgroup: cv.label,
+        line: { color: col, width: 2.6, shape: 'hv' },
+        hovertemplate: `${cv.label}<br>%{x:.1f} d<br>%{y:.1f}% alive<extra></extra>`
+      });
+      const cens = cv.steps.filter((s) => s.nCens > 0);
+      if (cens.length) {
+        traces.push({
+          x: cens.map((s) => s.t), y: cens.map((s) => s.S * 100), mode: 'markers', legendgroup: cv.label, showlegend: false,
+          marker: { symbol: 'line-ns-open', size: 9, color: col, line: { width: 1.6, color: col } },
+          hovertemplate: `${cv.label}<br>censored at %{x:.1f} d<extra></extra>`
+        });
+      }
+    });
+    const layout = baseLayout(opts.title || '', { showlegend: true });
+    layout.xaxis.title.text = opts.xTitle || 'Age (days)';
+    layout.yaxis.title.text = 'Survival (%)';
+    layout.yaxis.range = [0, 102];
+    layout.shapes = [{ type: 'line', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 50, y1: 50, line: { color: THEME.axis, width: 1, dash: 'dot' } }];
+    plot(el, traces, layout);
+  }
+
   /* ============================ export ============================ */
   async function figureToDataURL(el, format = 'png', scale = 2) {
     const plots = el.classList && el.classList.contains('js-plotly-plot')
@@ -1127,7 +1163,7 @@
     actogramMatrix, actogram, averageActogram, sleepActogram, actogramScaling,
     rasterChart, periodogramChart, periodDistributionChart, autocorrelationChart,
     boxPlot, barSummaryChart, timelineChart, histogramChart, multiBoxPlot,
-    populationChart, profileComparisonChart,
+    populationChart, profileComparisonChart, survivalChart,
     figureToDataURL, exportFigure, resizeAll, periodogramSeries, describeGroups, setTheme
   };
 })(window);

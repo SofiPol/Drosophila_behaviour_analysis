@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
-<link rel="icon" type="image/svg+xml" href="assets/insect-mark.svg?v=2.5.0">
-<link rel="stylesheet" href="css/styles.css?v=2.5.0">
+<link rel="icon" type="image/svg+xml" href="assets/insect-mark.svg?v=2.6.0">
+<link rel="stylesheet" href="css/styles.css?v=2.6.0">
 </head>
 <body>
 <div class="app-shell">
@@ -46,7 +46,8 @@
     <button class="step" data-section="circadian" type="button"><span>07</span>Circadian</button>
     <button class="step" data-section="phase" type="button"><span>08</span>Phase</button>
     <button class="step" data-section="stats" type="button"><span>09</span>Statistics</button>
-    <button class="step" data-section="export" type="button"><span>10</span>Export</button>
+    <button class="step" data-section="survival" type="button"><span>10</span>Survival</button>
+    <button class="step" data-section="export" type="button"><span>11</span>Export</button>
   </nav>
 
   <div class="scope-strip hidden" id="scope-strip">
@@ -81,7 +82,7 @@
           <p class="privacy-note">Nothing is uploaded to a server. The page runs entirely client-side.</p>
         </div>
         <figure class="hero-figure" aria-hidden="true">
-          <img class="hero-figure-insect" src="assets/insect-drawing.png?v=2.5.0" alt="">
+          <img class="hero-figure-insect" src="assets/insect-drawing.png?v=2.6.0" alt="">
           <figcaption><span>one animal</span><span>every rhythm</span></figcaption>
         </figure>
       </div>
@@ -517,11 +518,48 @@
     </section>
 
     <!-- ============================================================ -->
-    <!-- 10 EXPORT                                                    -->
+    <!-- 10 SURVIVAL                                                  -->
+    <!-- ============================================================ -->
+    <section class="panel" id="sec-survival">
+      <div class="section-head">
+        <div><p class="eyebrow">10 · Survival</p><h2 class="display">Lifespan from immobility.</h2></div>
+        <button class="btn primary" id="btn-run-survival" type="button">Score survival</button>
+      </div>
+      <article class="card">
+        <p class="small muted">An animal is scored dead when it makes no movement for the set number of hours. The time of death is the last movement. Animals still moving at the end of the recording are censored (alive) and handled by the Kaplan–Meier estimate.</p>
+        <div class="controls">
+          <label>Dead after no movement (h)<input type="number" id="surv-dead-hours" value="24" min="1" step="1"></label>
+          <label>Movement threshold (counts)<input type="number" id="surv-threshold" value="0" min="0" step="1"></label>
+          <label>Age at recording start (days)<input type="number" id="surv-start-age" value="0" min="0" step="0.5"></label>
+          <label>Group by
+            <select id="surv-groupvar"><option value="genotype">Genotype</option><option value="group">Group</option><option value="sex">Sex</option><option value="treatment">Treatment</option><option value="replicate">Replicate</option><option value="experiment">Experiment</option></select>
+          </label>
+          <label>Correction<select id="surv-correction"><option value="holm">Holm</option><option value="bh">Benjamini–Hochberg</option><option value="bonferroni">Bonferroni</option></select></label>
+          <label class="check-label"><input type="checkbox" id="surv-permanent" checked> Death must be permanent (no movement until end of recording)</label>
+          <label class="check-label"><input type="checkbox" id="surv-ci" checked> 95% confidence bands</label>
+        </div>
+      </article>
+      <div class="kpi-grid" id="surv-kpis"></div>
+      <article class="card"><header class="card-head"><span class="card-index">A</span><div><h3>Kaplan–Meier survival</h3><p>Step curves per group; tick marks are censored animals.</p></div><button class="btn tiny ghost" data-export="surv-curve" type="button">Export</button></header><div class="chart tall" id="surv-curve"></div></article>
+      <div class="grid-2">
+        <article class="card"><header class="card-head"><span class="card-index">B</span><div><h3>Survival summary by group</h3></div><button class="btn tiny ghost" id="btn-export-survival-summary" type="button">Export CSV</button></header><div class="table-wrap" id="surv-summary-table"></div></article>
+        <article class="card"><header class="card-head"><span class="card-index">C</span><div><h3>Lifespan of animals that died</h3></div><button class="btn tiny ghost" data-export="surv-box" type="button">Export</button></header><div class="chart" id="surv-box"></div></article>
+      </div>
+      <article class="card"><header class="card-head"><span class="card-index">D</span><div><h3>Log-rank tests</h3></div></header><div class="table-wrap" id="surv-tests"></div></article>
+      <article class="card">
+        <header class="card-head"><span class="card-index">E</span><div><h3>Per-animal status</h3></div>
+          <button class="btn tiny ghost" id="btn-export-survival" type="button">Export CSV</button>
+        </header>
+        <div class="table-wrap tall" id="surv-animal-table"></div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 11 EXPORT                                                    -->
     <!-- ============================================================ -->
     <section class="panel" id="sec-export">
       <div class="section-head">
-        <div><p class="eyebrow">10 · Export</p><h2 class="display">Take it with you.</h2></div>
+        <div><p class="eyebrow">11 · Export</p><h2 class="display">Take it with you.</h2></div>
       </div>
       <div class="grid-2">
         <article class="card">
@@ -534,6 +572,8 @@
             <button class="btn ghost" data-export-csv="profiles" type="button">profiles.csv</button>
             <button class="btn ghost" data-export-csv="groupstats" type="button">group_stats.csv</button>
             <button class="btn ghost" data-export-csv="phase" type="button">phase_metrics.csv</button>
+            <button class="btn ghost" data-export-csv="survival" type="button">survival.csv</button>
+            <button class="btn ghost" data-export-csv="survivalsummary" type="button">survival_summary.csv</button>
           </div>
           <div class="row-buttons">
             <button class="btn primary" id="btn-export-zip" type="button">Download complete package (.zip)</button>
@@ -550,6 +590,7 @@
               <option value="actogram-grid">Actograms</option>
               <option value="sleep-profile-chart">Sleep profile</option>
               <option value="phase-circular">Circular phase</option>
+              <option value="surv-curve">Survival curves</option>
             </select></label>
             <label>Format<select id="export-format"><option value="png">PNG</option><option value="svg">SVG</option></select></label>
             <label>Scale<select id="export-scale"><option value="2">2×</option><option value="3" selected>3×</option><option value="4">4×</option></select></label>
@@ -579,9 +620,10 @@
       <a href="#circadian" data-goto="circadian"><span>07</span>Circadian</a>
       <a href="#phase" data-goto="phase"><span>08</span>Phase</a>
       <a href="#stats" data-goto="stats"><span>09</span>Statistics</a>
-      <a href="#export" data-goto="export"><span>10</span>Export</a>
+      <a href="#survival" data-goto="survival"><span>10</span>Survival</a>
+      <a href="#export" data-goto="export"><span>11</span>Export</a>
     </div>
-<div class="footer-meta"><span>Chronobiology Workbench v2.5.0</span><span>Client-side · no data leaves your browser</span></div>
+<div class="footer-meta"><span>Chronobiology Workbench v2.6.0</span><span>Client-side · no data leaves your browser</span></div>
   </footer>
 </div>
 
@@ -607,14 +649,15 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/sql-wasm.js"></script>
-<script src="js/core.js?v=2.5.0"></script>
-<script src="js/stats.js?v=2.5.0"></script>
-<script src="js/importers.js?v=2.5.0"></script>
-<script src="js/sleep.js?v=2.5.0"></script>
-<script src="js/circadian.js?v=2.5.0"></script>
-<script src="js/phase.js?v=2.5.0"></script>
-<script src="js/charts.js?v=2.5.0"></script>
-<script src="js/sample.js?v=2.5.0"></script>
-<script src="js/app.js?v=2.5.0"></script>
+<script src="js/core.js?v=2.6.0"></script>
+<script src="js/stats.js?v=2.6.0"></script>
+<script src="js/importers.js?v=2.6.0"></script>
+<script src="js/sleep.js?v=2.6.0"></script>
+<script src="js/circadian.js?v=2.6.0"></script>
+<script src="js/phase.js?v=2.6.0"></script>
+<script src="js/lifespan.js?v=2.6.0"></script>
+<script src="js/charts.js?v=2.6.0"></script>
+<script src="js/sample.js?v=2.6.0"></script>
+<script src="js/app.js?v=2.6.0"></script>
 </body>
 </html>

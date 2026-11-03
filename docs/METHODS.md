@@ -285,9 +285,21 @@ The app reports effect sizes alongside p-values. It does not implement mixed-eff
 | `profiles.csv` | group × time bin: mean, SEM, n for activity and sleep |
 | `group_stats.csv` | descriptive statistics for the current comparison |
 | `phase_metrics.csv` | IS, IV, RA, COG, M10, L5, acrophase, onset, offset, MAI, EAI |
+| `survival.csv` | one row per animal: status (dead / censored / excluded), time in days, event flag |
+| `survival_summary.csv` | group × n, deaths, censored, median, mean ± SEM lifespan, RMST, maximum lifespan |
 | `manifest.json` | app version, date, files, dataset description, parameters and references |
 
 The HTML report embeds the rendered figures and the parameter manifest. Use the browser's **Print / Save as PDF** to create a PDF.
+
+---
+
+## 9b. Survival and lifespan
+
+- **Death scoring.** An animal is scored dead when it makes no movement (activity ≤ the movement threshold, default 0) for at least the set number of hours (default 24 h). The time of death is the start of that immobility period, i.e. the last movement. By default the immobility must continue to the end of the recording, so a long quiet spell followed by movement is not scored as death; this can be switched off to use the first long immobility period instead.
+- **Censoring.** Animals still moving at the end of the recording are censored at the recording length. Animals with no data, or with no movement at all (for example empty wells), are excluded.
+- **Age.** Times are in days from the start of the recording; set *Age at recording start* to report age.
+- **Kaplan–Meier.** Product-limit survival per group (genotype by default) with 95% log–log confidence bands. Median survival is the first time survival is ≤ 50%; "not reached" if survival stays above 50%. The restricted mean survival time (RMST) is the area under the curve up to the last observation. Mean ± SEM lifespan uses animals that died only, so it underestimates lifespan when many animals are censored.
+- **Log-rank test.** Across all groups (χ², k − 1 df), plus pairwise log-rank tests with Holm, Benjamini–Hochberg or Bonferroni correction when there are more than two groups.
 
 ---
 

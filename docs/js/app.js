@@ -10,6 +10,7 @@
   const SL = window.SleepLab;
   const CL = window.CircadianLab;
   const PL = window.PhaseLab;
+  const LL = window.LifespanLab;
   const CH = window.Charts;
   const SM = window.SampleData;
 
@@ -22,7 +23,7 @@
   const SECTION_NAMES = {
     import: ['01', 'Import'], settings: ['02', 'Settings'], overview: ['03', 'Overview'],
     actograms: ['04', 'Actograms'], profiles: ['05', 'Profiles'], sleep: ['06', 'Sleep'],
-    circadian: ['07', 'Circadian'], phase: ['08', 'Phase'], stats: ['09', 'Statistics'], export: ['10', 'Export']
+    circadian: ['07', 'Circadian'], phase: ['08', 'Phase'], stats: ['09', 'Statistics'], survival: ['10', 'Survival'], export: ['11', 'Export']
   };
 
   const state = {
@@ -73,7 +74,8 @@
       onsetThresholdFrac: 0.2, onsetMinDurationMin: 30,
       reboundBaseline: '', reboundDeprivation: '', reboundRecovery: '',
       errorBars: 'sem', normalise: 'none', timeBase: 'ZT', actogramBin: 30,
-      actogramScale: 'percentile', doubleActogram: true
+      actogramScale: 'percentile', doubleActogram: true,
+      survDeadHours: 24, survThreshold: 0, survStartAge: 0, survGroupBy: 'genotype', survPermanent: true, survCi: true, survCorrection: 'holm'
     };
   }
 
@@ -299,6 +301,7 @@
         else if (name === 'circadian' && state.circadian.length) renderCircadian();
         else if (name === 'phase' && state.phaseRows.length) renderPhase();
         else if (name === 'stats' && state.metricsRows.length) renderStats();
+        else if (name === 'survival' && state.animals.length) renderSurvival();
         else if (name === 'export') updateManifest();
         setTimeout(() => { try { CH.resizeAll(panel); } catch (e) { /* noop */ } }, 140);
       } catch (e) { console.error(e); toast(e.message || String(e), 'error'); }
@@ -1704,7 +1707,92 @@
     toast('Validation complete.', 'success');
   }
 
+  /* ============================ render: survival ============================ */
+  function syncSurvivalUI() {
+    const s = state.settings;
+    $('surv-dead-hours').value = s.survDeadHours;
+    $('surv-threshold').value = s.survThreshold;
+    $('surv-start-age').value = s.survStartAge;
+    $('surv-groupvar').value = s.survGroupBy;
+    $('surv-correction').value = s.survCorrection;
+    $('surv-permanent').checked = !!s.survPermanent;
+    $('surv-ci').checked = !!s.survCi;
+  }
+  function readSurvivalUI() {
+    const s = state.settings;
+    s.survDeadHours = +$('surv-dead-hours').value || 24;
+    s.survThreshold = Math.max(0, +$('surv-threshold').value || 0);
+    s.survStartAge = Math.max(0, +$('surv-start-age').value || 0);
+    s.survGroupBy = $('surv-groupvar').value;
+    s.survCorrection = $('surv-correction').value;
+    s.survPermanent = $('surv-permanent').checked;
+    s.survCi = $('surv-ci').checked;
+    saveSettings();
+  }
+  function computeSurvival() {
+    const s = state.settings;
+    state.survival = LL.analyse(state.animals, {
+      deadHours: s.survDeadHours, threshold: s.survThreshold, permanent: s.survPermanent,
+      startAgeDays: s.survStartAge, groupBy: s.survGroupBy, correction: s.survCorrection
+    });
+    return state.survival;
+  }
+  const dayStr = (v, d = 1) => C.isNum(v) ? v.toFixed(d) : '—';
+  function renderSurvival() {
+    if (!state.animals.length) throw new Error('Build a dataset first.');
+    readSurvivalUI();
+    const sv = computeSurvival();
+    const scored = sv.rows.filter((r) => r.status !== 'excluded');
+    const dead = scored.filter((r) => r.event);
+    const excluded = sv.rows.length - scored.length;
+    const allCurve = LL.kaplanMeier(scored.map((r) => ({ time: r.time, event: r.event })));
+    kpiGrid('surv-kpis', [
+      { k: 'Animals scored', v: scored.length, s: excluded ? `${excluded} excluded (no data / never active)` : `${sv.labels.length} group${sv.labels.length === 1 ? '' : 's'}` },
+      { k: 'Dead', v: dead.length, s: `no movement ≥ ${state.settings.survDeadHours} h` },
+      { k: 'Alive at end', v: scored.length - dead.length, s: 'censored' },
+      { k: 'Median survival', v: C.isNum(allCurve.median) ? `${dayStr(allCurve.median)} d` : 'not reached', s: 'all animals · Kaplan–Meier' },
+      { k: 'Mean lifespan', v: dead.length ? `${dayStr(C.mean(dead.map((r) => r.time)))} d` : '—', s: dead.length > 1 ? `SEM ${dayStr(C.sem(dead.map((r) => r.time)), 2)} · dead only` : 'dead only' },
+      { k: 'Log-rank', v: sv.overall ? C.fmtP(sv.overall.p) : '—', s: sv.overall ? `χ²(${sv.overall.df}) = ${fmt(sv.overall.chi2, 2)}` : 'needs ≥ 2 groups' }
+    ]);
+
+    CH.survivalChart($('surv-curve'), sv.curves, { ci: state.settings.survCi, xTitle: state.settings.survStartAge > 0 ? 'Age (days)' : 'Days from recording start' });
+
+    table('surv-summary-table', ['Group', 'n', 'Dead', 'Censored', 'Median (d)', 'Mean ± SEM (d)', 'RMST (d)', 'Max (d)'],
+      sv.curves.map((cv) => [
+        esc(cv.label), cv.n, cv.deaths, cv.censored,
+        C.isNum(cv.median) ? dayStr(cv.median) : 'not reached',
+        cv.deaths ? `${dayStr(cv.meanDeath)}${C.isNum(cv.semDeath) ? ' ± ' + dayStr(cv.semDeath, 2) : ''}` : '—',
+        dayStr(cv.rmst), dayStr(cv.maxLifespan)
+      ]), { numeric: [1, 2, 3, 4, 5, 6, 7] });
+
+    const boxRows = dead.map((r) => ({ group: r.label, time: r.time }));
+    if (boxRows.length) CH.boxPlot($('surv-box'), boxRows, 'time', { label: 'Lifespan (days)', title: '' });
+    else CH.clear($('surv-box'), 'No deaths detected. Lower the inactivity period or record for longer.');
+
+    const testRows = [];
+    if (sv.overall) testRows.push(['All groups', fmt(sv.overall.chi2, 3), sv.overall.df, C.fmtP(sv.overall.p), '—']);
+    sv.pairwise.forEach((r) => testRows.push([`${esc(r.a)} vs ${esc(r.b)}`, fmt(r.chi2, 3), 1, C.fmtP(r.p), C.fmtP(r.pAdj)]));
+    table('surv-tests', ['Comparison', 'χ²', 'df', 'p', `p (${state.settings.survCorrection})`], testRows, { numeric: [1, 2, 3, 4] });
+
+    table('surv-animal-table', ['Animal', 'Group', 'Genotype', 'Status', 'Time (d)', 'Event', 'Note'],
+      sv.rows.map((r) => [esc(r.id), esc(r.label), esc(r.genotype), r.status, dayStr(r.time, 2), r.event ? 1 : 0, esc(r.note)]),
+      { numeric: [4, 5] });
+    state.dirty.survival = false;
+  }
+
   /* ============================ export ============================ */
+  function survivalCsv() {
+    const sv = computeSurvival();
+    const headers = ['animal_id', 'group_by', 'group', 'genotype', 'sex', 'treatment', 'replicate', 'experiment', 'well', 'status', 'time_days', 'event', 'recorded_days', 'note'];
+    const rows = sv.rows.map((r) => [r.id, sv.groupBy, r.label, r.genotype, r.sex, r.treatment, r.replicate, r.experiment, r.well, r.status, r.time, r.event ? 1 : 0, r.recorded, r.note]);
+    return { filename: 'survival.csv', content: C.csvStringify(headers, rows) };
+  }
+  function survivalSummaryCsv() {
+    const sv = computeSurvival();
+    const headers = ['group_by', 'group', 'n', 'deaths', 'censored', 'median_days', 'mean_lifespan_days', 'sem_lifespan_days', 'rmst_days', 'max_lifespan_days'];
+    const rows = sv.curves.map((cv) => [sv.groupBy, cv.label, cv.n, cv.deaths, cv.censored, cv.median, cv.meanDeath, cv.semDeath, cv.rmst, cv.maxLifespan]);
+    return { filename: 'survival_summary.csv', content: C.csvStringify(headers, rows) };
+  }
   function metricsCsv() {
     const headers = ['animal_id', 'group', 'genotype', 'sex', 'treatment', 'replicate', 'experiment', 'start_datetime', 'stop_datetime', 'well', 'channel', 'format', 'alive', 'flags',
       'days_analyzed', 'complete_days', 'total_activity', 'mean_activity_day', 'day_activity', 'night_activity', 'day_activity_per_day', 'night_activity_per_day', 'light_fraction',
@@ -1787,7 +1875,7 @@
     return { filename: 'phase_metrics.csv', content: C.csvStringify(headers, rows) };
   }
   function exportCsv(kind) {
-    const map = { animals: metricsCsv, timeseries: timeSeriesCsv, bouts: boutsCsv, periodograms: periodogramsCsv, profiles: profilesCsv, groupstats: groupStatsCsv, phase: phaseCsv };
+    const map = { animals: metricsCsv, timeseries: timeSeriesCsv, bouts: boutsCsv, periodograms: periodogramsCsv, profiles: profilesCsv, groupstats: groupStatsCsv, phase: phaseCsv, survival: survivalCsv, survivalsummary: survivalSummaryCsv };
     const fn = map[kind];
     if (!fn) return;
     if (!state.metricsRows.length) { toast('Build a dataset first.', 'error'); return; }
@@ -1840,7 +1928,9 @@
       ['bouts', boutsCsv()],
       ['periodograms', periodogramsCsv()],
       ['profiles', profilesCsv()],
-      ['phase_metrics', phaseCsv()]
+      ['phase_metrics', phaseCsv()],
+      ['survival', survivalCsv()],
+      ['survival_summary', survivalSummaryCsv()]
     ];
     for (const [name, table] of tables) {
       const rows = C.csvParse(table.content).rows;
@@ -1857,7 +1947,7 @@
   async function exportZip() {
     if (!state.metricsRows.length) throw new Error('Build a dataset first.');
     const zip = new JSZip();
-    const files = [metricsCsv(), timeSeriesCsv(), boutsCsv(), periodogramsCsv(), profilesCsv(), groupStatsCsv(), phaseCsv()];
+    const files = [metricsCsv(), timeSeriesCsv(), boutsCsv(), periodogramsCsv(), profilesCsv(), groupStatsCsv(), phaseCsv(), survivalCsv(), survivalSummaryCsv()];
     files.forEach((f) => zip.file(f.filename, f.content));
     zip.file('manifest.json', JSON.stringify(manifest(), null, 2));
     // figures
@@ -1866,7 +1956,8 @@
       'figures/boxplot.png': 'stat-box',
       'figures/periodogram.png': 'circ-periodogram',
       'figures/sleep_profile.png': 'sleep-profile-chart',
-      'figures/phase_circular.png': 'phase-circular'
+      'figures/phase_circular.png': 'phase-circular',
+      'figures/survival.png': 'surv-curve'
     };
     for (const [name, id] of Object.entries(figMap)) {
       const el = $(id);
@@ -2025,6 +2116,11 @@
     $('circ-method').addEventListener('change', guard(renderCircadian));
     $('btn-render-phase').addEventListener('click', guard(renderPhase));
     $('btn-run-stats').addEventListener('click', guard(() => runStats(true)));
+    $('btn-run-survival').addEventListener('click', guard(renderSurvival));
+    ['surv-dead-hours', 'surv-threshold', 'surv-start-age', 'surv-groupvar', 'surv-correction', 'surv-permanent', 'surv-ci']
+      .forEach((id) => $(id).addEventListener('change', guard(renderSurvival)));
+    $('btn-export-survival').addEventListener('click', () => exportCsv('survival'));
+    $('btn-export-survival-summary').addEventListener('click', () => exportCsv('survivalsummary'));
     $('btn-profile-test').addEventListener('click', guard(runProfileTest));
     $('btn-run-validation').addEventListener('click', guard(runValidation));
     $('btn-report').addEventListener('click', guard(generateReport));
@@ -2044,6 +2140,7 @@
   function init() {
     loadSettings();
     syncSettingsUI();
+    syncSurvivalUI();
     initNav();
     setupImport();
     setupSettings();
@@ -2060,8 +2157,8 @@
   // Public, read-friendly API for debugging and scripted use.
   window.CSA = {
     state,
-    modules: { Core: C, Stats: S, Importers: I, Sleep: SL, Circadian: CL, Phase: PL, Charts: CH, Sample: SM },
-    analyse: runAll, render: { overview: renderOverview, actograms: renderActograms, profiles: renderProfiles, sleep: renderSleep, circadian: renderCircadian, phase: renderPhase, stats: runStats },
+    modules: { Core: C, Stats: S, Importers: I, Sleep: SL, Circadian: CL, Phase: PL, Charts: CH, Sample: SM, Lifespan: LL },
+    analyse: runAll, render: { overview: renderOverview, actograms: renderActograms, profiles: renderProfiles, sleep: renderSleep, circadian: renderCircadian, phase: renderPhase, stats: runStats, survival: renderSurvival },
     exportCsv, exportWorkbook, exportZip, generateReport, runValidation, setSection
   };
 
