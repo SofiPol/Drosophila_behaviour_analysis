@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
-<link rel="icon" type="image/svg+xml" href="assets/insect-mark.svg?v=2.6.1">
-<link rel="stylesheet" href="css/styles.css?v=2.6.1">
+<link rel="icon" type="image/svg+xml" href="assets/insect-mark.svg?v=2.6.2">
+<link rel="stylesheet" href="css/styles.css?v=2.6.2">
 </head>
 <body>
 <div class="app-shell">
@@ -82,7 +82,7 @@
           <p class="privacy-note">Nothing is uploaded to a server. The page runs entirely client-side.</p>
         </div>
         <figure class="hero-figure" aria-hidden="true">
-          <img class="hero-figure-insect" src="assets/insect-drawing.png?v=2.6.1" alt="">
+          <img class="hero-figure-insect" src="assets/insect-drawing.png?v=2.6.2" alt="">
           <figcaption><span>one animal</span><span>every rhythm</span></figcaption>
         </figure>
       </div>
@@ -544,13 +544,14 @@
       </article>
       <div class="kpi-grid" id="surv-kpis"></div>
       <article class="card"><header class="card-head"><span class="card-index">A</span><div><h3>Kaplan–Meier survival</h3><p>Step curves per group; tick marks are censored animals.</p></div><button class="btn tiny ghost" data-export="surv-curve" type="button">Export</button></header><div class="chart tall" id="surv-curve"></div></article>
+      <article class="card"><header class="card-head"><span class="card-index">B</span><div><h3>Animals alive at the end of the experiment</h3><p>Percentage of animals still alive at the end of the recording, per group, with 95% Wilson intervals.</p></div><button class="btn tiny ghost" data-export="surv-bar" type="button">Export</button></header><div class="chart" id="surv-bar"></div></article>
       <div class="grid-2">
-        <article class="card"><header class="card-head"><span class="card-index">B</span><div><h3>Survival summary by group</h3></div><button class="btn tiny ghost" id="btn-export-survival-summary" type="button">Export CSV</button></header><div class="table-wrap" id="surv-summary-table"></div></article>
-        <article class="card"><header class="card-head"><span class="card-index">C</span><div><h3>Lifespan of animals that died</h3></div><button class="btn tiny ghost" data-export="surv-box" type="button">Export</button></header><div class="chart" id="surv-box"></div></article>
+        <article class="card"><header class="card-head"><span class="card-index">C</span><div><h3>Survival summary by group</h3></div><button class="btn tiny ghost" id="btn-export-survival-summary" type="button">Export CSV</button></header><div class="table-wrap" id="surv-summary-table"></div></article>
+        <article class="card"><header class="card-head"><span class="card-index">D</span><div><h3>Lifespan of animals that died</h3></div><button class="btn tiny ghost" data-export="surv-box" type="button">Export</button></header><div class="chart" id="surv-box"></div></article>
       </div>
-      <article class="card"><header class="card-head"><span class="card-index">D</span><div><h3>Log-rank tests</h3></div></header><div class="table-wrap" id="surv-tests"></div></article>
+      <article class="card"><header class="card-head"><span class="card-index">E</span><div><h3>Log-rank tests</h3></div></header><div class="table-wrap" id="surv-tests"></div></article>
       <article class="card">
-        <header class="card-head"><span class="card-index">E</span><div><h3>Per-animal status</h3></div>
+        <header class="card-head"><span class="card-index">F</span><div><h3>Per-animal status</h3></div>
           <button class="btn tiny ghost" id="btn-export-survival" type="button">Export CSV</button>
         </header>
         <div class="table-wrap tall" id="surv-animal-table"></div>
@@ -594,6 +595,7 @@
               <option value="sleep-profile-chart">Sleep profile</option>
               <option value="phase-circular">Circular phase</option>
               <option value="surv-curve">Survival curves</option>
+              <option value="surv-bar">% alive at end</option>
             </select></label>
             <label>Format<select id="export-format"><option value="png">PNG</option><option value="svg">SVG</option></select></label>
             <label>Scale<select id="export-scale"><option value="2">2×</option><option value="3" selected>3×</option><option value="4">4×</option></select></label>
@@ -626,7 +628,7 @@
       <a href="#survival" data-goto="survival"><span>10</span>Survival</a>
       <a href="#export" data-goto="export"><span>11</span>Export</a>
     </div>
-<div class="footer-meta"><span>Chronobiology Workbench v2.6.1</span><span>Client-side · no data leaves your browser</span></div>
+<div class="footer-meta"><span>Chronobiology Workbench v2.6.2</span><span>Client-side · no data leaves your browser</span></div>
   </footer>
 </div>
 
@@ -652,15 +654,15 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/sql-wasm.js"></script>
-<script src="js/core.js?v=2.6.1"></script>
-<script src="js/stats.js?v=2.6.1"></script>
-<script src="js/importers.js?v=2.6.1"></script>
-<script src="js/sleep.js?v=2.6.1"></script>
-<script src="js/circadian.js?v=2.6.1"></script>
-<script src="js/phase.js?v=2.6.1"></script>
-<script src="js/lifespan.js?v=2.6.1"></script>
-<script src="js/charts.js?v=2.6.1"></script>
-<script src="js/sample.js?v=2.6.1"></script>
-<script src="js/app.js?v=2.6.1"></script>
+<script src="js/core.js?v=2.6.2"></script>
+<script src="js/stats.js?v=2.6.2"></script>
+<script src="js/importers.js?v=2.6.2"></script>
+<script src="js/sleep.js?v=2.6.2"></script>
+<script src="js/circadian.js?v=2.6.2"></script>
+<script src="js/phase.js?v=2.6.2"></script>
+<script src="js/lifespan.js?v=2.6.2"></script>
+<script src="js/charts.js?v=2.6.2"></script>
+<script src="js/sample.js?v=2.6.2"></script>
+<script src="js/app.js?v=2.6.2"></script>
 </body>
 </html>

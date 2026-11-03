@@ -1767,14 +1767,15 @@
     ]);
 
     CH.survivalChart($('surv-curve'), sv.curves, { ci: state.settings.survCi, xTitle: state.settings.survStartAge > 0 ? 'Age (days)' : 'Days from recording start' });
+    CH.aliveAtEndChart($('surv-bar'), sv.curves, {});
 
-    table('surv-summary-table', ['Group', 'n', 'Dead', 'Censored', 'Median (d)', 'Mean ± SEM (d)', 'RMST (d)', 'Max (d)'],
+    table('surv-summary-table', ['Group', 'n', 'Dead', 'Censored', '% alive at end', 'Median (d)', 'Mean ± SEM (d)', 'RMST (d)', 'Max (d)'],
       sv.curves.map((cv) => [
-        esc(cv.label), cv.n, cv.deaths, cv.censored,
+        esc(cv.label), cv.n, cv.deaths, cv.censored, cv.n ? `${(100 * cv.censored / cv.n).toFixed(1)}%` : '—',
         C.isNum(cv.median) ? dayStr(cv.median) : 'not reached',
         cv.deaths ? `${dayStr(cv.meanDeath)}${C.isNum(cv.semDeath) ? ' ± ' + dayStr(cv.semDeath, 2) : ''}` : '—',
         dayStr(cv.rmst), dayStr(cv.maxLifespan)
-      ]), { numeric: [1, 2, 3, 4, 5, 6, 7] });
+      ]), { numeric: [1, 2, 3, 4, 5, 6, 7, 8] });
 
     const boxRows = dead.map((r) => ({ group: r.label, time: r.time }));
     if (boxRows.length) CH.boxPlot($('surv-box'), boxRows, 'time', { label: 'Lifespan (days)', title: '' });
@@ -1800,8 +1801,8 @@
   }
   function survivalSummaryCsv() {
     const sv = computeSurvival();
-    const headers = ['group_by', 'group', 'n', 'deaths', 'censored', 'median_days', 'mean_lifespan_days', 'sem_lifespan_days', 'rmst_days', 'max_lifespan_days'];
-    const rows = sv.curves.map((cv) => [sv.groupBy, cv.label, cv.n, cv.deaths, cv.censored, cv.median, cv.meanDeath, cv.semDeath, cv.rmst, cv.maxLifespan]);
+    const headers = ['group_by', 'group', 'n', 'deaths', 'censored', 'percent_alive_at_end', 'median_days', 'mean_lifespan_days', 'sem_lifespan_days', 'rmst_days', 'max_lifespan_days'];
+    const rows = sv.curves.map((cv) => [sv.groupBy, cv.label, cv.n, cv.deaths, cv.censored, cv.n ? 100 * cv.censored / cv.n : NaN, cv.median, cv.meanDeath, cv.semDeath, cv.rmst, cv.maxLifespan]);
     return { filename: 'survival_summary.csv', content: C.csvStringify(headers, rows) };
   }
   function metricsCsv() {
@@ -1968,7 +1969,8 @@
       'figures/periodogram.png': 'circ-periodogram',
       'figures/sleep_profile.png': 'sleep-profile-chart',
       'figures/phase_circular.png': 'phase-circular',
-      'figures/survival.png': 'surv-curve'
+      'figures/survival.png': 'surv-curve',
+      'figures/alive_at_end.png': 'surv-bar'
     };
     for (const [name, id] of Object.entries(figMap)) {
       const el = $(id);

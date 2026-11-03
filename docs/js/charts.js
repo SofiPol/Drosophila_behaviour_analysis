@@ -1103,6 +1103,34 @@
     plot(el, traces, layout);
   }
 
+  function aliveAtEndChart(el, curves, opts = {}) {
+    if (!curves || !curves.length) { clear(el, 'No survival data.'); return; }
+    const z = 1.959964;
+    const rows = curves.map((cv) => {
+      const n = cv.n, k = cv.censored;
+      const p = n ? k / n : NaN;
+      const denom = 1 + z * z / n;
+      const centre = (p + z * z / (2 * n)) / denom;
+      const half = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom;
+      return { label: cv.label, n, k, pct: p * 100, lo: Math.max(0, centre - half) * 100, hi: Math.min(1, centre + half) * 100 };
+    });
+    const trace = {
+      type: 'bar', x: rows.map((r) => r.label), y: rows.map((r) => r.pct),
+      marker: { color: rows.map((_, i) => C.groupColor(i)), opacity: 0.85, line: { color: THEME.ink, width: 1 } },
+      error_y: { type: 'data', symmetric: false, array: rows.map((r) => r.hi - r.pct), arrayminus: rows.map((r) => r.pct - r.lo), color: THEME.ink, thickness: 1.4, width: 6 },
+      text: rows.map((r) => `${r.k}/${r.n}`), textposition: 'inside', insidetextanchor: 'start',
+      textfont: { family: MONO, size: 11, color: THEME.ink },
+      customdata: rows.map((r) => [r.k, r.n, r.lo, r.hi]),
+      hovertemplate: '%{x}<br>%{y:.1f}% alive (%{customdata[0]}/%{customdata[1]})<br>95% CI %{customdata[2]:.1f}–%{customdata[3]:.1f}%<extra></extra>'
+    };
+    const layout = baseLayout(opts.title || '', { showlegend: false });
+    layout.yaxis.title.text = 'Alive at end of experiment (%)';
+    layout.yaxis.range = [0, 105];
+    layout.xaxis.title.text = opts.xTitle || '';
+    layout.bargap = 0.35;
+    plot(el, [trace], layout);
+  }
+
   /* ============================ export ============================ */
   async function figureToDataURL(el, format = 'png', scale = 2) {
     const plots = el.classList && el.classList.contains('js-plotly-plot')
@@ -1163,7 +1191,7 @@
     actogramMatrix, actogram, averageActogram, sleepActogram, actogramScaling,
     rasterChart, periodogramChart, periodDistributionChart, autocorrelationChart,
     boxPlot, barSummaryChart, timelineChart, histogramChart, multiBoxPlot,
-    populationChart, profileComparisonChart, survivalChart,
+    populationChart, profileComparisonChart, survivalChart, aliveAtEndChart,
     figureToDataURL, exportFigure, resizeAll, periodogramSeries, describeGroups, setTheme
   };
 })(window);
