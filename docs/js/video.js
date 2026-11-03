@@ -183,6 +183,48 @@
     return openNative(file);
   }
 
+  /* ============================ on-screen runtime ============================ */
+  // 8x10 px glyphs of the Zantiks video overlay ("Zantiks Video : DATE   RUNTIME"), one hex byte per row.
+  const GLYPH_HEX = {
+    '0': '7cc7c6cedef6f6c6c67c', '1': '1878181818181818187e', '2': '7cc7c6060c183460c6fe', '3': '7cc706063c070606c67c',
+    '4': '9c1c3c7cccccfe0c2c1e', '5': 'ffc2c0c0fc060606ce7c', '6': '7cc7c0c0fcc6c6e6c67c', '7': 'fece061c583032303070',
+    '8': '7cc7c6c67ec6c6c6c67c', '9': '7cc7c6c6ce7e0606c67c', '.': '00000000000000001818', ' ': '00000000000000000000'
+  };
+  const GLYPHS = Object.entries(GLYPH_HEX).map(([ch, hex]) => {
+    const bits = new Uint8Array(80);
+    for (let r = 0; r < 10; r++) { const v = parseInt(hex.slice(r * 2, r * 2 + 2), 16); for (let x = 0; x < 8; x++) bits[r * 8 + x] = (v >> (7 - x)) & 1; }
+    return { ch, bits };
+  });
+
+  /**
+   * Read the runtime (seconds) that Zantiks prints at the bottom-left of each video frame.
+   * @param {CanvasRenderingContext2D} ctx a canvas holding the unmodified frame at its native size
+   * @returns {number|null} null when the text is not recognised
+   */
+  function readRuntime(ctx, W, H) {
+    if (W < 330 || H < 20) return null;
+    let data;
+    try { data = ctx.getImageData(8 + 8 * 26, H - 14, 96, 10).data; } catch (e) { return null; }
+    let txt = '';
+    for (let i = 0; i < 12; i++) {
+      const bits = new Uint8Array(80);
+      for (let y = 0; y < 10; y++) for (let x = 0; x < 8; x++) {
+        const p = (y * 96 + i * 8 + x) * 4;
+        bits[y * 8 + x] = (data[p] + data[p + 1] + data[p + 2]) / 3 > 130 ? 1 : 0;
+      }
+      let best = null, bd = 99;
+      for (const g of GLYPHS) {
+        let d = 0;
+        for (let k = 0; k < 80; k++) if (bits[k] !== g.bits[k]) d++;
+        if (d < bd) { bd = d; best = g.ch; }
+      }
+      if (bd > 6) return null;
+      txt += best;
+    }
+    const m = /^\s*(\d+\.\d{3})\s*$/.exec(txt);
+    return m ? parseFloat(m[1]) : null;
+  }
+
   /** Start of the recording encoded in a file name such as name-20261022T165244.avi. */
   function timestampFromName(name) {
     const m = /(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/.exec(String(name || ''));
@@ -242,5 +284,5 @@
     return animals.length > 24 ? { rows: 8, cols: 12 } : { rows: 4, cols: 6 };
   }
 
-  global.VideoLab = { openVideo, timestampFromName, defaultCalibration, wellCentre, cellSize, wellPosition, detectPlate };
+  global.VideoLab = { openVideo, timestampFromName, readRuntime, defaultCalibration, wellCentre, cellSize, wellPosition, detectPlate };
 })(window);

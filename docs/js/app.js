@@ -1798,12 +1798,22 @@
   const VID_COLOURS = { active: '#FFC400', asleep: '#00B8E6', inactive: '#9A9A9A', dead: '#5A5A5A', missing: '#5A5A5A', none: '#7A7A7A' };
   const vid = {
     source: null, t: 0, playing: false, raf: 0, last: 0, busy: false, pending: false,
-    cal: null, plateKey: '', cells: [], selected: null, stateCache: new WeakMap(), anchors: [],
+    cal: null, plateKey: '', cells: [], selected: null, stateCache: new WeakMap(), anchors: [], auto: null, frameRuntime: null,
     dragging: -1, animalSig: '', traceFor: null, traceCentre: null, cursorBin: -1, cursorFor: null
   };
   const vidPlate = () => ({ rows: Math.max(1, +$('vid-rows').value || 8), cols: Math.max(1, +$('vid-cols').value || 12) });
   // Sync points {t: video seconds, rt: recording seconds}; one point = real time, two or more = piecewise linear.
+  // Without manual points the runtime printed on the frame is used (vid.frameRuntime, or vid.auto between frames).
   function vidToRuntime(t) {
+    const manual = vid.anchors.filter((x) => !x.guess);
+    if (!manual.length && vid.source && t === vid.t && vid.frameRuntime !== null) return vid.frameRuntime;
+    if (!manual.length && vid.auto && vid.auto.length > 1) {
+      const m = vid.auto;
+      let i = 0;
+      while (i < m.length - 2 && t > m[i + 1].t) i++;
+      const p = m[i], q = m[i + 1];
+      return p.rt + (t - p.t) * (q.rt - p.rt) / (q.t - p.t);
+    }
     const a = vid.anchors;
     if (!a.length) return t;
     if (a.length === 1) return a[0].rt + (t - a[0].t);
@@ -2030,6 +2040,7 @@
     if (cv.width !== src.width || cv.height !== src.height) { cv.width = src.width; cv.height = src.height; }
     const ctx = cv.getContext('2d');
     ctx.drawImage(img, 0, 0, src.width, src.height);
+    vid.frameRuntime = VL.readRuntime(ctx, src.width, src.height);
     vidOverlay(ctx, src.width, src.height);
     vidCrop(img);
     vidUpdateInfo();
@@ -2130,18 +2141,20 @@
       ['Frames', src.nFrames], ['Duration', fmtClock(src.duration)]
     ];
     $('vid-info').innerHTML = items.map(([k, v]) => `<div class="info-item"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join('');
-    // Estimate when the video starts from the time stamps in the file names.
+    // Read the runtime printed on the frames; otherwise estimate the start from the time stamps in the file names.
     vid.anchors = [];
+    vid.frameRuntime = null;
+    vid.auto = await vidAutoSync(src);
     const vStart = VL.timestampFromName(file.name);
     const dStart = state.dataset && (state.dataset.startDate || state.dataset.start);
-    if (vStart && dStart instanceof Date) {
+    if (!vid.auto && vStart && dStart instanceof Date) {
       const d = (vStart - dStart) / 1000;
       const total = state.dataset.tHours ? state.dataset.tHours[state.dataset.tHours.length - 1] * 3600 : Infinity;
       if (d >= 0 && d <= total) vid.anchors = [{ t: 0, rt: d, guess: true }];
     }
     vidRenderAnchors();
     renderVideo();
-    toast(`Video loaded: ${src.nFrames} frames.`, 'success');
+    toast(`Video loaded: ${src.nFrames} frames${vid.auto ? ', runtime read from the video' : ''}.`, 'success');
   }
 
   function vidCanvasPoint(ev) {
@@ -2152,8 +2165,32 @@
   function vidRenderAnchors() {
     const el = $('vid-anchors');
     if (!el) return;
-    if (!vid.anchors.length) { el.textContent = 'No sync points: the video start is taken as the start of the recording.'; return; }
-    el.textContent = 'Sync points: ' + vid.anchors.map((a) => `video ${fmtClock(a.t)} \u2192 runtime ${a.rt.toFixed(1)} s${a.guess ? ' (guessed from file names)' : ''}`).join('; ');
+    const manual = vid.anchors.filter((a) => !a.guess);
+    const list = (arr) => arr.map((a) => `video ${fmtClock(a.t)} \u2192 runtime ${a.rt.toFixed(1)} s${a.guess ? ' (guessed from file names)' : ''}`).join('; ');
+    if (!manual.length && vid.auto && vid.auto.length > 1) {
+      const a = vid.auto;
+      el.textContent = `Synchronised automatically: the runtime printed on each frame is read by the app (${a.length} frames checked, ${a[0].rt.toFixed(1)}\u2013${a[a.length - 1].rt.toFixed(1)} s). Add a sync point only to override it.`;
+    } else if (vid.anchors.length) {
+      el.textContent = 'Sync points: ' + list(vid.anchors);
+    } else {
+      el.textContent = vid.source ? 'The printed runtime could not be read. Add sync points by hand: the video start is otherwise taken as the start of the recording.' : '';
+    }
+  }
+  // Read the printed runtime on frames spread across the video to map video time to recording time.
+  async function vidAutoSync(src) {
+    const c = document.createElement('canvas');
+    c.width = src.width; c.height = src.height;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const n = src.nFrames;
+    const step = Math.max(1, Math.floor(n / 240));
+    const map = [];
+    for (let i = 0; i < n; i += step) {
+      const t = i / src.fps + 1e-6;
+      ctx.drawImage(await src.frameAt(t), 0, 0, src.width, src.height);
+      const rt = VL.readRuntime(ctx, src.width, src.height);
+      if (rt !== null && (!map.length || rt >= map[map.length - 1].rt)) map.push({ t: i / src.fps, rt });
+    }
+    return map.length > 1 && map.length >= (n / step) * 0.8 ? map : null;
   }
   function vidSyncChanged() {
     vid.traceCentre = null;
