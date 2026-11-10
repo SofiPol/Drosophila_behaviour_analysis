@@ -382,13 +382,18 @@
     $('meta-file').addEventListener('change', guard(async (e) => {
       const f = e.target.files[0];
       if (!f) return;
-      const text = await I.readFileAsText(f);
-      state.metadata = I.parseMetadata(text);
-      state.metadataFile = { name: f.name, size: f.size };
-      state.metadataStats = null;
-      state.metaMapping = I.suggestMetadataMapping(state.metadata);
-      renderMetaMapping();
-      linkMetadata({ notify: true });
+      try {
+        const text = await I.readFileAsText(f);
+        state.metadata = I.parseMetadata(text);
+        state.metadataFile = { name: f.name, size: f.size };
+        state.metadataStats = null;
+        state.metaBlockMap = null;
+        state.metaMapping = I.suggestMetadataMapping(state.metadata);
+        renderMetaMapping();
+        linkMetadata({ notify: true });
+      } finally {
+        e.target.value = '';
+      }
     }));
   }
 
@@ -409,6 +414,7 @@
     state.phaseRows = [];
     state.metricsRows = [];
     state.metadataStats = null;
+    state.metaBlockMap = null;
     updateMetadataStatus();
     updateScopeCount();
     $('dataset-card').classList.add('hidden');
@@ -455,13 +461,23 @@
     if (list.length === 1) return list[0];
     const wides = list.map(normalizeToWide);
     const merged = mergeWideDatasets(wides);
-    merged.name = list.map((p) => p.name || p.file || 'file').join(' + ');
+    const names = list.map((p) => p.name || p.file || 'file');
+    merged.name = names.length <= 3
+      ? names.join(' + ')
+      : `${names.length} files (${names.slice(0, 2).join(', ')} …)`;
     return merged;
   }
 
   function mergeWideDatasets(list) {
     if (list.length === 1) return list[0];
     const base = list[0];
+    const binMin = base.binMinutes || 1;
+    const binMs = binMin * 60000;
+    const sameBin = list.every((d) => Math.abs((d.binMinutes || 1) - binMin) < 1e-6);
+    if (!sameBin) {
+      toast('Files must share the same bin size. Re-export them at the same resolution.', 'error');
+      return base;
+    }
     const clockOf = (d) => {
       if (C.isNum(d.startClockHour)) return d.startClockHour;
       if (d.times && d.times[0] instanceof Date) {
@@ -470,42 +486,79 @@
       }
       return 0;
     };
-    const compatible = list.every((d) =>
-      d.times && base.times &&
-      Math.abs((d.binMinutes || 1) - (base.binMinutes || 1)) < 1e-6 &&
-      Math.abs(clockOf(d) - clockOf(base)) < 1e-6
-    );
-    if (!compatible) {
-      toast('Files must have the same bin size and start clock. Different experiment dates and durations are allowed.', 'error');
+    const dated = list.every((d) => d.times && d.times.length && d.times[0] instanceof Date);
+    const elapsed = list.every((d) => d.times && d.times.length && !(d.times[0] instanceof Date));
+    if (!dated && !elapsed) {
+      toast('Cannot combine dated files with elapsed-time files in one import.', 'error');
       return base;
     }
-    const maxN = C.max(list.map((d) => d.times.length));
-    const binMin = base.binMinutes || 1;
-    const times = [];
-    if (base.times[0] instanceof Date) {
-      for (let i = 0; i < maxN; i++) times.push(new Date(base.times[0].getTime() + i * binMin * 60000));
+    let times = [];
+    let offsets = [];
+    if (dated) {
+      // Monitors are aligned on absolute time, so files started a few seconds
+      // (or days) apart still line up on the correct bins instead of on their
+      // position within the file.
+      const startMs = Math.min(...list.map((d) => d.times[0].getTime()));
+      const endMs = Math.max(...list.map((d) => d.times[d.times.length - 1].getTime()));
+      const nBins = Math.max(1, Math.floor((endMs - startMs) / binMs) + 1);
+      if (nBins > 2_000_000) {
+        toast('The merged time range is too long. Check the timestamps in the uploaded files.', 'error');
+        return base;
+      }
+      for (let i = 0; i < nBins; i++) times.push(new Date(startMs + i * binMs));
+      offsets = list.map((d) => Math.round((d.times[0].getTime() - startMs) / binMs));
     } else {
+      const compatible = list.every((d) => Math.abs(clockOf(d) - clockOf(base)) < 1e-6);
+      if (!compatible) {
+        toast('Elapsed-time files must share the same start clock.', 'error');
+        return base;
+      }
+      const maxN = C.max(list.map((d) => d.times.length));
       for (let i = 0; i < maxN; i++) times.push(i * binMin / 60);
+      offsets = list.map(() => 0);
     }
-    const light = Array.isArray(base.light) ? base.light.slice(0, maxN) : [];
-    while (light.length < maxN) light.push(null);
-    const out = Object.assign({}, base, { times, light, series: {}, labels: {}, keys: [] });
+    const nOut = times.length;
+    const lightSum = new Float64Array(nOut);
+    const lightN = new Int32Array(nOut);
+    const out = Object.assign({}, base, {
+      times, light: new Array(nOut).fill(null), series: {}, labels: {}, keys: [], sources: []
+    });
+    if (dated) {
+      const t0 = times[0];
+      out.start = t0;
+      out.startClockHour = t0.getHours() + t0.getMinutes() / 60 + t0.getSeconds() / 3600;
+    }
     const prefixCounts = new Map();
-    list.forEach((d) => {
-      let basePrefix = list.length > 1 ? (d.name || 'file').replace(/\.[^.]+$/, '') : '';
-      const n = prefixCounts.get(basePrefix) || 0;
-      prefixCounts.set(basePrefix, n + 1);
-      if (n > 0) basePrefix += ' (' + (n + 1) + ')';
-      const prefix = basePrefix ? basePrefix + ':' : '';
+    list.forEach((d, idx) => {
+      const offset = offsets[idx] || 0;
+      out.sources.push(d.name || d.file || 'file');
+      if (Array.isArray(d.light)) {
+        for (let i = 0; i < d.times.length; i++) {
+          const b = offset + i;
+          if (b < 0 || b >= nOut) continue;
+          const v = d.light[i];
+          if (v === 0 || v === 1) { lightSum[b] += v; lightN[b]++; }
+        }
+      }
+      let filePrefix = (d.name || 'file').replace(/\.[^.]+$/, '');
+      const n = prefixCounts.get(filePrefix) || 0;
+      prefixCounts.set(filePrefix, n + 1);
+      if (n > 0) filePrefix += ' (' + (n + 1) + ')';
+      const prefix = filePrefix + ':';
       (d.keys || Object.keys(d.series)).forEach((key) => {
         const newKey = prefix + key;
-        const vals = (d.series[key] || []).slice(0, maxN);
-        while (vals.length < maxN) vals.push(NaN);
+        const vals = new Array(nOut).fill(NaN);
+        const src = d.series[key] || [];
+        for (let i = 0; i < d.times.length && i < src.length; i++) {
+          const b = offset + i;
+          if (b >= 0 && b < nOut) vals[b] = src[i];
+        }
         out.series[newKey] = vals;
         out.labels[newKey] = prefix + (d.labels && d.labels[key] ? d.labels[key] : key);
         out.keys.push(newKey);
       });
     });
+    for (let b = 0; b < nOut; b++) out.light[b] = lightN[b] ? (lightSum[b] / lightN[b] >= 0.5 ? 1 : 0) : null;
     return out;
   }
 
@@ -578,7 +631,8 @@
       html += `<p class="preview-note">Detected Zantiks wells: ${esc((w.keys || []).join(', '))}. The original values are displayed; conversion to standard DAM multiplies distance by 1000 and writes one channel per well (minimum 32).</p>`;
       $('btn-download-dam').classList.remove('hidden');
     } else if (w.format === 'dam') {
-      html += `<p class="preview-note">Detected ${w.keys.length} channels. The light column is read automatically; empty channels can be excluded on the next step.</p>`;
+      const nFiles = Array.isArray(w.sources) && w.sources.length > 1 ? w.sources.length : 0;
+      html += `<p class="preview-note">Detected ${w.keys.length} channels${nFiles ? ` across ${nFiles} monitor files` : ''}. The light column is read automatically; empty channels can be excluded on the next step.</p>`;
     } else if (w.format === 'ethoscope' || w.format === 'ethoscope-csv') {
       html += `<p class="preview-note">Detected ${w.keys.length} ROIs. Movement is classified from the maximum velocity in 10 s windows; adjust the threshold in Import if needed (currently 1.0 relative units).</p>`;
     }
@@ -663,7 +717,9 @@
         });
         c.channel = Math.max(1, siblings.indexOf(c.key) + 1);
       }
-      c.well = (w.labels && w.labels[c.key]) || c.key;
+      c.well = parts.length > 1
+        ? parts.slice(1).join(':')
+        : ((w.labels && w.labels[c.key]) || c.key);
       return c;
     });
     if (state.metadata) {
@@ -779,8 +835,10 @@
       well: $('meta-well-col')?.value || null,
       replicate: $('meta-replicate-col')?.value || null,
       experiment: $('meta-exp-col')?.value || null,
+      status: state.metaMapping?.status || state.metadata?.suggested?.status || null,
       start: state.metaMapping?.start || null,
-      stop: state.metaMapping?.stop || null
+      stop: state.metaMapping?.stop || null,
+      blockMap: state.metaBlockMap || null
     };
   }
 
@@ -792,20 +850,50 @@
     }
     const st = state.metadataStats;
     if (!st) return `${nRows} metadata rows loaded.`;
+    const listText = (list) => {
+      if (!list || !list.length) return 'none';
+      const shown = list.slice(0, 4).join(', ');
+      return list.length > 4 ? `${shown} … (+${list.length - 4})` : shown;
+    };
     if (!st.matched) {
-      const mf = st.metadataFiles && st.metadataFiles.length ? st.metadataFiles.join(', ') : 'none';
-      const df = st.dataFiles && st.dataFiles.length ? st.dataFiles.join(', ') : 'none';
-      return `No animals matched. Metadata file: ${mf}. Data file: ${df}. Check the file, region/channel, well or animal ID join columns; set File / monitor to “none” to match across file names.`;
+      const blockHint = st.blockCount > 1
+        ? ` The metadata contains ${st.blockCount} channel blocks; choose one block per monitor in the block mapping above.`
+        : '';
+      return `No animals matched. Metadata monitors: ${listText(st.metadataFiles)}. Data files: ${listText(st.dataFiles)}. The “File / monitor” column may hold the full file name, “DAM3”/“Monitor 3” or a plain monitor number; a row without a channel applies to the whole monitor.${blockHint}`;
     }
     const suffix = st.unmatched ? ` ${st.unmatched} animal${st.unmatched === 1 ? '' : 's'} unmatched.` : '';
     const missing = st.missingGenotype ? ` ${st.missingGenotype} have no genotype in the metadata.` : '';
-    const fallback = st.fileFallback ? ` ${st.fileFallback} matched by region/channel because the file names differed.` : '';
-    return `Linked ${st.matched} of ${st.total} animals to ${st.matchedRows} metadata rows. Genotype is added automatically.${suffix}${missing}${fallback}`;
+    const monitors = st.monitors
+      ? ` Matched ${st.matchedFiles.length} of ${st.monitors} monitor${st.monitors === 1 ? '' : 's'}.`
+      : '';
+    const blocks = st.blockAssignment && st.blockAssignment.length
+      ? ` Blocks: ${st.blockAssignment.slice(0, 4).map((a) => `${a.monitor} → ${a.block ? 'block ' + a.block : 'none'}`).join('; ')}${st.blockAssignment.length > 4 ? ' …' : ''}.`
+      : '';
+    const noMetadata = st.unmatchedFiles && st.unmatchedFiles.length
+      ? ` No metadata for: ${listText(st.unmatchedFiles)}.`
+      : '';
+    const ambiguous = st.ambiguous
+      ? ` ${st.ambiguous} channel${st.ambiguous === 1 ? '' : 's'} matched rows from more than one monitor and were left unlinked.`
+      : '';
+    const fallback = st.fileFallback ? ` ${st.fileFallback} matched by channel despite a different file name.` : '';
+    return `Linked ${st.matched} of ${st.total} animals to ${st.matchedRows} metadata rows.${monitors}${blocks} Genotype is added automatically.${suffix}${missing}${noMetadata}${ambiguous}${fallback}`;
   }
 
   function updateMetadataStatus() {
     const el = $('meta-status');
     if (el) el.textContent = metadataStatusText();
+  }
+
+  function ensureMetaBlockMap() {
+    if (!state.metadata || !state.configs.length) { state.metaBlockMap = null; return null; }
+    const mapping = state.metaMapping || I.suggestMetadataMapping(state.metadata);
+    const info = I.suggestMetadataBlockMap(state.configs, state.metadata, mapping);
+    if (!info) { state.metaBlockMap = null; return null; }
+    const current = state.metaBlockMap || {};
+    const valid = info.monitors.length > 0 &&
+      info.monitors.every((m) => Object.prototype.hasOwnProperty.call(current, m.key));
+    if (!valid) state.metaBlockMap = info.map ? Object.assign({}, info.map) : {};
+    return info;
   }
 
   function linkMetadata({ notify = true } = {}) {
@@ -818,6 +906,8 @@
       if (notify) toast('Metadata loaded; it will be linked automatically when a dataset is used.', 'info');
       return null;
     }
+    ensureMetaBlockMap();
+    state.metaMapping.blockMap = state.metaBlockMap;
     state.configs = I.applyMetadata(state.configs, state.metadata, state.metaMapping);
     state.metadataStats = state.configs.metaStats || null;
     renderAnimalTable();
@@ -826,9 +916,13 @@
     if (notify) {
       const st = state.metadataStats;
       if (st && st.matched) {
-        toast(`Metadata linked to ${st.matched} of ${st.total} animals. Genotype added automatically.`, 'success');
+        const monitors = st.monitors ? ` across ${st.matchedFiles.length} of ${st.monitors} monitors` : '';
+        const missingMonitors = st.unmatchedFiles && st.unmatchedFiles.length
+          ? ` No metadata for: ${st.unmatchedFiles.slice(0, 4).join(', ')}${st.unmatchedFiles.length > 4 ? ' …' : ''}.`
+          : '';
+        toast(`Metadata linked to ${st.matched} of ${st.total} animals${monitors}.${missingMonitors}`, 'success');
       } else {
-        toast('Metadata loaded but no animals matched. Check the file/channel/animal ID columns.', 'error');
+        toast('Metadata loaded but no animals matched. Check the file/monitor, channel/well or animal ID columns.', 'error');
       }
     }
     return state.metadataStats;
@@ -840,6 +934,20 @@
     const mapping = state.metaMapping || meta.suggested;
     const cols = meta.header;
     const mk = (id, label, suggested) => `<label>${label}<select id="${id}"><option value="">— none —</option>${cols.map((c) => `<option value="${esc(c)}" ${c === suggested ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>`;
+    const blockInfo = ensureMetaBlockMap();
+    let blockHtml = '';
+    if (blockInfo) {
+      const current = state.metaBlockMap || {};
+      const rowsHtml = blockInfo.monitors.map((mon) => {
+        const value = current[mon.key];
+        const options = blockInfo.blocks.map((b) => `<option value="${b.index}" ${value === b.index ? 'selected' : ''}>Block ${b.index + 1} · ${esc(b.label)} (${b.size} rows)</option>`).join('');
+        return `<label>${esc(mon.key)} ← <select data-block-monitor="${esc(mon.key)}"><option value="">— none —</option>${options}</select></label>`;
+      }).join('');
+      blockHtml = `<div class="mapping-row">${rowsHtml}</div>
+        <p class="hint">${blockInfo.compatible
+          ? 'The metadata has no monitor column that matches these files, so each channel block is assigned to one monitor in monitor order (by the number in the file name when present, otherwise upload order). Check the block mapping above before analysing.'
+          : `The metadata has ${blockInfo.blocks.length} channel blocks but ${blockInfo.monitors.length} monitors; choose the block for each monitor above.`}</p>`;
+    }
     $('meta-mapping').classList.remove('hidden');
     $('meta-mapping').innerHTML = `<div class="mapping-row">
       ${mk('meta-file-col', 'File / monitor', mapping.file)}
@@ -853,6 +961,8 @@
       ${mk('meta-replicate-col', 'Replicate', mapping.replicate)}
       ${mk('meta-exp-col', 'Experiment', mapping.experiment)}
     </div>
+    ${blockHtml}
+    <p class="hint">The file / monitor column matches full names, monitor labels such as “DAM3” or “Monitor 3”, and plain monitor numbers. A row without a channel applies to every channel of that monitor; a row without a monitor applies to all monitors.</p>
     <p class="hint" id="meta-status">${esc(metadataStatusText())}</p>
     <div class="row-buttons">
       <button class="btn ghost small" id="btn-apply-meta" type="button">Apply metadata</button>
@@ -872,7 +982,15 @@
       }
       linkMetadata({ notify: true });
     }));
-    $('meta-mapping').querySelectorAll('select').forEach((sel) => sel.addEventListener('change', () => {
+    $('meta-mapping').querySelectorAll('select[data-block-monitor]').forEach((sel) => sel.addEventListener('change', () => {
+      state.metaBlockMap = state.metaBlockMap || {};
+      state.metaBlockMap[sel.dataset.blockMonitor] = sel.value === '' ? null : Number(sel.value);
+      state.metaMapping = metadataMappingFromUI();
+      state.metaMapping.blockMap = state.metaBlockMap;
+      if (state.configs.length) linkMetadata({ notify: false });
+      renderMetaMapping();
+    }));
+    $('meta-mapping').querySelectorAll('select:not([data-block-monitor])').forEach((sel) => sel.addEventListener('change', () => {
       state.metaMapping = metadataMappingFromUI();
       if (state.configs.length) linkMetadata({ notify: false });
     }));
@@ -2379,7 +2497,10 @@
         rows: state.metadata.rows.length,
         mapping: state.metaMapping,
         matched: state.metadataStats ? state.metadataStats.matched : null,
-        total: state.metadataStats ? state.metadataStats.total : null
+        total: state.metadataStats ? state.metadataStats.total : null,
+        monitors: state.metadataStats ? state.metadataStats.monitors : null,
+        matchedMonitors: state.metadataStats && state.metadataStats.matchedFiles ? state.metadataStats.matchedFiles : null,
+        blocks: state.metadataStats ? state.metadataStats.blockAssignment : null
       } : null,
       animals: state.animals.length,
       totalAnimals: state.fullAnimals.length || state.animals.length,

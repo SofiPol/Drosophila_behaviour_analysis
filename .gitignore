@@ -1,0 +1,14 @@
+# Research data — never commit behavioural recordings or metadata
+Monitor*.txt
+*.dat
+*.csv
+*.xlsx
+*.xls
+*.db
+*.sqlite
+*.sqlite3
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini

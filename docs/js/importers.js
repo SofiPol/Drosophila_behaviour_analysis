@@ -61,6 +61,63 @@
    * @param {string} filename
    * @param {object} opts { lightIndex, metaCols, channels }
    */
+  /**
+   * DAM5M monitors can write a second, all-zero record type between the real
+   * one-minute counts (for example status 51 at 10-second intervals alongside
+   * status 1 counts). If an entire record type never carries activity, drop it.
+   * A record type that is simply inactive is kept because other types still
+   * carry data; if every type is empty the file is returned unchanged.
+   */
+  function dropEmptyStatusRows(rows) {
+    if (rows.length < 10) return rows;
+    const statusOf = (r) => String(r.meta && r.meta.length ? r.meta[0] : '').trim();
+    const stats = new Map();
+    for (const r of rows) {
+      const key = statusOf(r);
+      let st = stats.get(key);
+      if (!st) { st = { n: 0, active: 0 }; stats.set(key, st); }
+      st.n++;
+      let sum = 0;
+      for (const v of r.channels || []) if (Number.isFinite(v)) sum += Math.abs(v);
+      if (sum > 0) st.active++;
+    }
+    if (stats.size < 2) return rows;
+    const drop = new Set();
+    for (const [key, st] of stats) {
+      if (st.n >= rows.length * 0.2 && st.active === 0) drop.add(key);
+    }
+    if (!drop.size || drop.size === stats.size) return rows;
+    return rows.filter((r) => !drop.has(statusOf(r)));
+  }
+
+  /**
+   * Some DAM5M monitors write intermediate 10-second placeholder rows next to
+   * the real one-minute count rows, both sharing the minute timestamp. Keep a
+   * single row per timestamp, preferring the row that carries activity data
+   * (and the later row when both are empty), so bins are not duplicated.
+   */
+  function collapseDuplicateTimestamps(rows) {
+    if (rows.length < 2) return rows;
+    const best = new Map();
+    let duplicates = false;
+    const channelSum = (r) => {
+      let s = 0;
+      for (const v of r.channels || []) if (Number.isFinite(v)) s += v;
+      return s;
+    };
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r.timestamp) continue;
+      const prev = best.get(r.timestamp);
+      if (prev === undefined) { best.set(r.timestamp, i); continue; }
+      duplicates = true;
+      if (channelSum(r) >= channelSum(rows[prev])) best.set(r.timestamp, i);
+    }
+    if (!duplicates) return rows;
+    const keep = new Set(best.values());
+    return rows.filter((_, i) => keep.has(i));
+  }
+
   function parseDam(text, filename, opts = {}) {
     const rawLines = text.split(/\r?\n/);
     const lines = rawLines.filter((l) => l.trim().length > 0);
@@ -173,18 +230,19 @@
       }
     }
 
+    const uniqueRows = collapseDuplicateTimestamps(dropEmptyStatusRows(rows));
     let start = null, end = null;
-    for (const r of rows) {
+    for (const r of uniqueRows) {
       if (!r.timestamp) continue;
       if (!start || r.timestamp < start) start = r.timestamp;
       if (!end || r.timestamp > end) end = r.timestamp;
     }
-    const binMinutes = inferBinMinutes(rows);
+    const binMinutes = inferBinMinutes(uniqueRows);
 
     return {
       kind: 'dam',
       file: filename || 'DAM.txt',
-      rows,
+      rows: uniqueRows,
       nChannels,
       metaCols,
       lightIndex,
@@ -1119,6 +1177,134 @@
   }
 
   /* ============================ metadata CSV ============================ */
+  /* ---- shared metadata helpers ---- */
+  function metaClean(v) {
+    const s = String(v ?? '').trim();
+    return /^(na|n\/a|null|none|\.|-)$/i.test(s) ? '' : s;
+  }
+  function metaBasename(v) {
+    return String(v ?? '').trim().replace(/\\/g, '/').split('/').pop();
+  }
+  function metaStripExt(v) {
+    return metaBasename(v).replace(/\.[a-z0-9]{1,8}$/i, '');
+  }
+  function metaNormText(v) {
+    return metaStripExt(v).toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+  function metaCompact(v) {
+    return String(v ?? '').replace(/[^a-z0-9]+/g, '');
+  }
+  function metaTokens(v) {
+    return String(v ?? '').split(/[^a-z0-9]+/).filter(Boolean);
+  }
+  function metaNormKey(v) {
+    const s = String(v ?? '').trim().toLowerCase();
+    return /^-?\d+(?:\.0+)?$/.test(s) ? String(Number(s)) : s;
+  }
+  function metaChannelOf(v) {
+    const s = String(v ?? '').trim().toLowerCase();
+    const m = /^(?:ch(?:annel)?|region(?:.?id)?|roi|well|arena|position|tube)?[\s._-]*0*(\d{1,4})$/.exec(s);
+    return m ? String(Number(m[1])) : '';
+  }
+  function metaMonitorNumber(v) {
+    const s = metaNormText(v);
+    if (!s) return null;
+    let m = /(?:^|[^a-z0-9])(?:dam|monitors?|mon|box|rig|rack|m)[\s._-]*0*(\d{1,3})(?![0-9])/.exec(s);
+    if (m) return Number(m[1]);
+    m = /^0*(\d{1,3})$/.exec(s);
+    return m ? Number(m[1]) : null;
+  }
+
+  /**
+   * Split a metadata table into consecutive channel blocks. DAM metadata is
+   * often written one plate after another with `region_id` restarting at 1;
+   * each such block belongs to one monitor file.
+   */
+  function metadataBlocks(meta, channelCol) {
+    const rows = (meta && meta.rows) || [];
+    if (!rows.length) return [];
+    const blocks = [];
+    let last = null;
+    for (let i = 0; i < rows.length; i++) {
+      const key = channelCol ? metaChannelOf(metaClean(rows[i][channelCol])) : '';
+      const ch = key === '' ? NaN : Number(key);
+      if (!blocks.length || (Number.isFinite(ch) && Number.isFinite(last) && ch < last)) {
+        blocks.push({ index: blocks.length, startRow: i, endRow: i, rows: [], size: 0, label: '' });
+      }
+      const b = blocks[blocks.length - 1];
+      b.endRow = i;
+      b.rows.push(i);
+      if (Number.isFinite(ch)) last = ch;
+    }
+    const labelCols = meta && meta.suggested
+      ? [meta.suggested.genotype, meta.suggested.group, meta.suggested.treatment].filter(Boolean)
+      : [];
+    for (const b of blocks) {
+      b.size = b.rows.length;
+      let label = '';
+      for (const col of labelCols) {
+        const counts = new Map();
+        for (const i of b.rows) {
+          const v = metaClean(rows[i][col]);
+          if (v) counts.set(v, (counts.get(v) || 0) + 1);
+        }
+        if (counts.size) {
+          label = [...counts.entries()].sort((a, b2) => b2[1] - a[1])[0][0];
+          break;
+        }
+      }
+      b.label = label || `Block ${b.index + 1}`;
+    }
+    return blocks;
+  }
+
+  /** Unique monitors in the dataset, in monitor-number order. */
+  function metadataMonitorKeys(configs) {
+    const seen = new Map();
+    for (const cfg of configs || []) {
+      const key = cfg.file || String(cfg.key || '').split(':')[0] || '';
+      if (!key) continue;
+      if (!seen.has(key)) seen.set(key, { key, number: metaMonitorNumber(key), order: seen.size });
+    }
+    return [...seen.values()].sort((a, b) => {
+      const an = a.number === null ? Infinity : a.number;
+      const bn = b.number === null ? Infinity : b.number;
+      return an - bn || a.order - b.order;
+    });
+  }
+
+  /**
+   * Suggest a block -> monitor assignment when the metadata has no usable
+   * monitor column. Returns null when normal file matching already works.
+   */
+  function suggestMetadataBlockMap(configs, meta, mapping) {
+    if (!meta || !mapping) return null;
+    const blocks = metadataBlocks(meta, mapping.channel);
+    if (blocks.length < 2) return null;
+    const monitors = metadataMonitorKeys(configs);
+    if (!monitors.length) return null;
+    if (mapping.file) {
+      const names = [...new Set((meta.rows || []).map((r) => metaClean(r[mapping.file])).filter(Boolean))];
+      const fileMatches = monitors.some((mon) => names.some((name) => {
+        const a = metaNormText(mon.key), b = metaNormText(name);
+        if (a === b || metaCompact(a) === metaCompact(b)) return true;
+        const ma = metaMonitorNumber(mon.key), mb = metaMonitorNumber(name);
+        return ma !== null && mb !== null && ma === mb;
+      }));
+      if (fileMatches) return null;
+    }
+    const counts = new Map();
+    for (const cfg of configs || []) {
+      const key = cfg.file || String(cfg.key || '').split(':')[0] || '';
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    const compatible = blocks.length === monitors.length &&
+      monitors.every((mon, i) => counts.get(mon.key) === blocks[i].size);
+    const map = {};
+    if (compatible) monitors.forEach((mon, i) => { map[mon.key] = i; });
+    return { blocks, monitors, map: compatible ? map : null, compatible };
+  }
+
   function parseMetadata(text) {
     const parsed = C.csvParse(text);
     if (parsed.rows.length < 2) throw new Error('Metadata needs a header and at least one row.');
@@ -1141,9 +1327,9 @@
     return {
       header, rows,
       suggested: {
-        file: find([/^file$/, /file.?name/, /monitor/, /source/]),
-        channel: find([/channel/, /region.?id/, /^roi$/, /well/]),
-        id: find([/animal.?id/, /fly.?id/, /subject/, /^id$/, /name/]),
+        file: find([/^file$/, /^file.?name$/, /^monitors?$/, /^monitor(?:.?id|.?no|.?name)?$/, /monitor/, /^dam$/, /^box$/, /^rig$/, /source/]),
+        channel: find([/^channel$/, /channel.?id/, /channel.?no/, /^ch$/, /region/, /^roi$/, /^well$/, /well/, /arena/, /tube/]),
+        id: find([/animal.?id/, /fly.?id/, /animal.?name/, /subject/, /^id$/, /^name$/]),
         genotype,
         group: find([/^group$/, /experimental.?group/, /cohort/, /condition/, /treatment/]) || genotype,
         sex: find([/sex/, /gender/]),
@@ -1151,6 +1337,7 @@
         well: find([/well/, /arena/, /chamber/]),
         replicate: find([/replicate/, /^rep$/, /block/]),
         experiment: find([/^exp$/, /experiment/]),
+        status: find([/^status$/, /alive/, /dead/, /^state$/, /outcome/]),
         start: find([/start.?datetime/, /start.?time/, /^start$/]),
         stop: find([/stop.?datetime/, /stop.?time/, /^stop$/])
       }
@@ -1170,85 +1357,238 @@
       well: s.well || null,
       replicate: s.replicate || null,
       experiment: s.experiment || null,
+      status: s.status || null,
       start: s.start || null,
       stop: s.stop || null
     };
   }
 
   /**
-   * Apply metadata rows to configs by file+channel or animal ID.
+   * Apply metadata rows to configs.
+   *
+   * Built for the usual DAM workflow: many monitor files and one metadata
+   * table. Rows are joined by animal ID, or by file/monitor plus channel/well.
+   * Monitor values are compared loosely, so "DAM3_2026-10-08.txt", "DAM3",
+   * "Monitor 3" and "3" all identify the same monitor. A row without a
+   * channel/well applies to every channel of its monitor, and a row without a
+   * file/monitor value acts as a default for every monitor.
+   *
+   * Values written by a previous call are restored before re-linking, so
+   * swapping the metadata file or changing the mapping never leaves stale
+   * genotypes or groups behind.
    */
   function applyMetadata(configs, meta, mapping) {
     if (!meta || !mapping) return configs;
-    const rows = meta.rows;
-    const norm = (v) => String(v ?? '').trim().toLowerCase();
-    const normKey = (v) => {
-      const s = norm(v);
-      return /^-?\d+(?:\.0+)?$/.test(s) ? String(Number(s)) : s;
+    const rows = meta.rows || [];
+    const mappingFile = mapping.file || null;
+    const mappingChannel = mapping.channel || null;
+    const mappingWell = mapping.well || null;
+    const mappingId = mapping.id || null;
+
+    const clean = metaClean;
+    const normText = metaNormText;
+    const compact = metaCompact;
+    const tokensOf = metaTokens;
+    const normKey = metaNormKey;
+    const channelOf = metaChannelOf;
+    const monitorNumberOf = metaMonitorNumber;
+    const configChannel = (cfg) => {
+      const direct = channelOf(cfg.channel);
+      if (direct) return direct;
+      const hay = String(cfg.well ?? '') + ' ' + String(cfg.key ?? '') + ' ' + String(cfg.label ?? '');
+      const m = /(?:ch(?:annel)?|region(?:.?id)?|roi|tube)[\s._-]*0*(\d{1,4})(?![0-9])/i.exec(hay);
+      return m ? String(Number(m[1])) : '';
     };
-    const clean = (v) => {
-      const s = String(v ?? '').trim();
-      return /^(na|n\/a|null|none|\.|-)$/i.test(s) ? '' : s;
+    const fileScore = (data, metaRow) => {
+      if (!data.norm || !metaRow.fileNorm) return 0;
+      if (data.norm === metaRow.fileNorm) return 5;
+      if (data.compact === metaRow.fileCompact) return 4.5;
+      if (metaRow.fileTokens.length && metaRow.fileTokens.every((t) => data.tokens.includes(t))) return 4;
+      if (data.monitor !== null && metaRow.fileMonitor !== null && data.monitor === metaRow.fileMonitor) return 3;
+      return 0;
     };
-    const normFile = (v) => norm(v).replace(/\.[a-z0-9]+$/, '');
-    const metadataFiles = mapping.file
-      ? [...new Set(rows.map((r) => clean(r[mapping.file])).filter(Boolean))]
-      : [];
-    const dataFiles = [...new Set(configs.map((c) => c.file).filter(Boolean))];
-    const rowMatches = (cfg, r, ignoreFile) => {
-      const idVal = mapping.id ? normKey(r[mapping.id]) : '';
-      const chVal = mapping.channel ? normKey(r[mapping.channel]) : '';
-      const wellVal = mapping.well ? normKey(r[mapping.well]) : '';
-      const fileVal = mapping.file ? norm(r[mapping.file]) : '';
-      const cfgCh = normKey(cfg.channel ?? cfg.well ?? cfg.key);
-      const cfgWell = normKey(cfg.well);
-      const cfgFile = norm(cfg.file ?? '');
-      const idMatch = idVal && (idVal === normKey(cfg.id) || idVal === normKey(cfg.key) || idVal === cfgWell);
-      const chMatch = chVal && (chVal === cfgCh || chVal === cfgWell ||
-        chVal.replace(/^ch/, '') === cfgCh.replace(/^ch/, ''));
-      const wellMatch = wellVal && wellVal === cfgWell;
-      const fileMatch = ignoreFile || !mapping.file || !fileVal ||
-        fileVal === cfgFile || normFile(fileVal) === normFile(cfgFile);
-      return idMatch || ((chMatch || wellMatch) && fileMatch);
-    };
-    let matched = 0, genotyped = 0, fileFallback = 0;
-    const matchedRows = new Set();
+
+    // Metadata rows, normalised once.
+    const prepared = rows.map((r, index) => {
+      const chRaw = mappingChannel ? clean(r[mappingChannel]) : '';
+      const wellRaw = mappingWell ? clean(r[mappingWell]) : '';
+      const fileRaw = mappingFile ? clean(r[mappingFile]) : '';
+      const fileNorm = normText(fileRaw);
+      return {
+        index,
+        row: r,
+        id: mappingId ? normKey(clean(r[mappingId])) : '',
+        chRaw,
+        ch: chRaw ? (channelOf(chRaw) || normKey(chRaw)) : '',
+        wellRaw,
+        well: wellRaw ? normKey(wellRaw) : '',
+        wellCh: wellRaw ? channelOf(wellRaw) : '',
+        file: fileRaw,
+        fileNorm,
+        fileCompact: compact(fileNorm),
+        fileTokens: tokensOf(fileNorm),
+        fileMonitor: monitorNumberOf(fileRaw)
+      };
+    });
+
+    // Animal IDs are only copied across when the column identifies one row
+    // each; genotype-like "ID" columns must not collapse every animal to one name.
+    const idCounts = new Map();
+    if (mappingId) for (const p of prepared) if (p.id) idCounts.set(p.id, (idCounts.get(p.id) || 0) + 1);
+    const idUnique = idCounts.size > 0 && [...idCounts.values()].every((n) => n === 1);
+    const useId = !!(mappingId && idUnique);
+
+    // Revert anything written by a previous metadata table before re-linking.
+    const previous = configs.metaAppliedByKey || {};
     for (const cfg of configs) {
-      let hit = rows.find((r) => rowMatches(cfg, r, false)) || null;
-      if (!hit && mapping.file) {
-        // A renamed data file should not prevent a unique region/channel or
-        // well match. Only use this fallback when exactly one metadata row fits.
-        const candidates = rows.filter((r) => rowMatches(cfg, r, true));
-        if (candidates.length === 1) {
-          hit = candidates[0];
-          fileFallback++;
+      const prev = previous[cfg.key];
+      if (!prev) continue;
+      for (const field of Object.keys(prev.values || {})) {
+        if (cfg[field] === prev.values[field]) cfg[field] = prev.base ? prev.base[field] : undefined;
+      }
+      if (prev.hadMetadata) {
+        if (prev.baseMetadata === undefined) delete cfg.metadata;
+        else cfg.metadata = Object.assign({}, prev.baseMetadata);
+      }
+    }
+
+    let matched = 0, genotyped = 0, fileFallback = 0, ambiguous = 0;
+    const matchedRows = new Set();
+    const matchedMonitors = new Set();
+    const appliedByKey = {};
+    const monitorOf = (cfg) => cfg.file || String(cfg.key || '').split(':')[0] || '';
+    // With a single monitor, a renamed data file can still be linked by channel;
+    // with several monitors that guess would be ambiguous, so it is not made.
+    const dataMonitors = new Set(configs.map(monitorOf).filter(Boolean));
+    const metaMonitors = new Set(rows.map((r) => normText(clean(r[mappingFile]))).filter(Boolean));
+    const allowLooseFile = !!(mappingFile && dataMonitors.size === 1 && metaMonitors.size === 1);
+
+    // Optional explicit block -> monitor assignment (used when one metadata
+    // table holds several channel blocks but has no usable monitor column).
+    const blockMap = mapping.blockMap && typeof mapping.blockMap === 'object' ? mapping.blockMap : null;
+    const blocks = metadataBlocks(meta, mappingChannel);
+    const blockOfRow = new Int32Array(rows.length).fill(-1);
+    if (blockMap) blocks.forEach((b) => { for (const i of b.rows) blockOfRow[i] = b.index; });
+    const blockForCfg = (cfg) => {
+      if (!blockMap) return null;
+      const mon = monitorOf(cfg);
+      if (!Object.prototype.hasOwnProperty.call(blockMap, mon)) return null;
+      const v = blockMap[mon];
+      return v === null || v === undefined || v === '' ? -1 : Number(v);
+    };
+
+    for (const cfg of configs) {
+      const wantBlock = blockForCfg(cfg);
+      const cfgWell = normKey(cfg.well);
+      const cfgLabel = normKey(cfg.label);
+      const cfgChannel = configChannel(cfg);
+      const cfgId = normKey(cfg.id);
+      const cfgKey = normKey(cfg.key);
+      const cfgFileNorm = normText(cfg.file || cfg.key || '');
+      const data = {
+        norm: cfgFileNorm,
+        compact: compact(cfgFileNorm),
+        tokens: tokensOf(cfgFileNorm),
+        monitor: monitorNumberOf(cfg.file || cfg.key || '')
+      };
+      let best = null, bestScore = -1, tieDifferentFile = false;
+      for (const p of prepared) {
+        if (wantBlock !== null && blockOfRow[p.index] !== wantBlock) continue;
+        const idMatch = !!(useId && p.id && (p.id === cfgId || p.id === cfgKey || p.id === cfgWell || p.id === cfgLabel));
+        const chMatch = !!(p.ch && (p.ch === cfgChannel || p.ch === cfgWell || p.ch === cfgLabel));
+        const wellMatch = !!(p.well && (p.well === cfgWell || p.well === cfgLabel || (p.wellCh && p.wellCh === cfgChannel)));
+        const fScore = mappingFile && p.file ? fileScore(data, p) : 0;
+        let score;
+        if (idMatch) {
+          score = 1000 + fScore * 10 + (chMatch ? 5 : 0) + (wellMatch ? 4 : 0);
+        } else {
+          if (mappingFile && p.file && !fScore && !allowLooseFile && wantBlock === null) continue;
+          // A row matches when any join key it carries matches; a second,
+          // non-matching key (for example a plate well on a DAM table) does
+          // not veto a channel match.
+          if ((p.ch || p.well) && !chMatch && !wellMatch) continue;
+          if (!p.ch && !p.well && !fScore) continue;
+          // A row without a channel is monitor-wide; a channel-specific row wins.
+          const specificity = (p.ch || p.well) ? (chMatch ? 5 : 0) + (wellMatch ? 4 : 0) : 0.5;
+          score = fScore * 10 + specificity;
+        }
+        if (score > bestScore) {
+          best = p; bestScore = score; tieDifferentFile = false;
+        } else if (score === bestScore && normText(p.file) !== normText(best.file)) {
+          tieDifferentFile = true;
         }
       }
-      if (!hit) continue;
+      if (!best) continue;
+      if (tieDifferentFile) { ambiguous++; continue; }
+
       matched++;
-      matchedRows.add(hit);
-      const genotype = mapping.genotype && hit[mapping.genotype] ? clean(hit[mapping.genotype]) : '';
-      if (genotype) cfg.genotype = genotype;
-      if (mapping.group && clean(hit[mapping.group])) cfg.group = clean(hit[mapping.group]);
+      matchedRows.add(best.row);
+      matchedMonitors.add(monitorOf(cfg));
+      if (mappingFile && best.file && fileScore(data, best) === 0 && wantBlock === null) fileFallback++;
+      const hit = best.row;
+      const before = {};
+      const set = (field, value) => {
+        if (value === undefined || value === null) return;
+        if (typeof value === 'string' && value === '') return;
+        if (!(field in before)) before[field] = cfg[field];
+        cfg[field] = value;
+      };
+
+      let genotype = mapping.genotype ? clean(hit[mapping.genotype]) : '';
+      if (genotype) set('genotype', genotype);
+      const group = mapping.group ? clean(hit[mapping.group]) : '';
+      if (group) set('group', group);
       // If the metadata only supplies a genotype, use it as the grouping key
       // so every downstream analysis automatically groups by genotype.
-      if (!cfg.genotype && mapping.group && /genotype|strain|allele|line/i.test(mapping.group)) {
-        cfg.genotype = clean(hit[mapping.group]);
+      if (!genotype && mapping.group && /genotype|strain|allele|line/i.test(mapping.group)) {
+        genotype = clean(hit[mapping.group]);
+        if (genotype) set('genotype', genotype);
       }
-      if ((!cfg.group || cfg.group === 'All') && cfg.genotype) cfg.group = cfg.genotype;
-      if (mapping.sex && clean(hit[mapping.sex])) cfg.sex = clean(hit[mapping.sex]);
-      if (mapping.treatment && clean(hit[mapping.treatment])) cfg.treatment = clean(hit[mapping.treatment]);
-      if (mapping.well && clean(hit[mapping.well])) cfg.well = clean(hit[mapping.well]);
-      if (mapping.replicate && clean(hit[mapping.replicate])) cfg.replicate = clean(hit[mapping.replicate]);
-      if (mapping.experiment && clean(hit[mapping.experiment])) cfg.experiment = clean(hit[mapping.experiment]);
+      if (cfg.genotype && (!cfg.group || cfg.group === 'All')) set('group', cfg.genotype);
+      if (useId) {
+        const idVal = clean(hit[mappingId]);
+        if (idVal) set('id', idVal);
+      }
+      if (mapping.sex && clean(hit[mapping.sex])) set('sex', clean(hit[mapping.sex]));
+      if (mapping.treatment && clean(hit[mapping.treatment])) set('treatment', clean(hit[mapping.treatment]));
+      if (mapping.well && clean(hit[mapping.well])) set('well', clean(hit[mapping.well]));
+      if (mapping.replicate && clean(hit[mapping.replicate])) set('replicate', clean(hit[mapping.replicate]));
+      if (mapping.experiment && clean(hit[mapping.experiment])) set('experiment', clean(hit[mapping.experiment]));
       const startCol = mapping.start || (meta.suggested && meta.suggested.start);
       const stopCol = mapping.stop || (meta.suggested && meta.suggested.stop);
-      if (startCol && clean(hit[startCol])) cfg.startDateTime = clean(hit[startCol]);
-      if (stopCol && clean(hit[stopCol])) cfg.stopDateTime = clean(hit[stopCol]);
+      if (startCol && clean(hit[startCol])) set('startDateTime', clean(hit[startCol]));
+      if (stopCol && clean(hit[stopCol])) set('stopDateTime', clean(hit[stopCol]));
+      const statusCol = mapping.status || (meta.suggested && meta.suggested.status);
+      if (statusCol) {
+        const statusVal = clean(hit[statusCol]);
+        if (/^(a|alive|live|ok|1)$/i.test(statusVal)) set('include', true);
+        else if (/^(d|dead|deceased|0|exclude|excluded|culled)$/i.test(statusVal)) set('include', false);
+      }
+      const obs = String(hit.observations || '');
+      if (/\b(alive)\b/i.test(obs)) set('include', true);
+      else if (/\b(dead|exclude|excluded|discard|culled|escaped)\b/i.test(obs)) set('include', false);
       if (cfg.genotype) genotyped++;
-      cfg.metadata = Object.assign({}, cfg.metadata, hit);
-      cfg.include = !/dead|exclude|no/i.test(hit.observations || '') || /alive/i.test(hit.observations || '');
+
+      const baseMetadata = cfg.metadata;
+      cfg.metadata = Object.assign({}, hit);
+      const values = {};
+      for (const field of Object.keys(before)) values[field] = cfg[field];
+      appliedByKey[cfg.key] = { values, base: before, hadMetadata: true, baseMetadata };
     }
+
+    configs.metaAppliedByKey = appliedByKey;
+    const dataFiles = [...new Set(configs.map((c) => c.file).filter(Boolean))];
+    const metadataFiles = mappingFile
+      ? [...new Set(rows.map((r) => clean(r[mappingFile])).filter(Boolean))]
+      : [];
+    const blockAssignment = blockMap
+      ? metadataMonitorKeys(configs).map((m) => ({
+        monitor: m.key,
+        block: Object.prototype.hasOwnProperty.call(blockMap, m.key) && blockMap[m.key] !== null && blockMap[m.key] !== ''
+          ? Number(blockMap[m.key]) + 1
+          : null
+      }))
+      : [];
     configs.metaStats = {
       matched,
       total: configs.length,
@@ -1259,6 +1599,12 @@
       missingGenotype: matched - genotyped,
       metadataFiles,
       dataFiles,
+      monitors: dataFiles.length,
+      matchedFiles: dataFiles.filter((f) => matchedMonitors.has(f)),
+      unmatchedFiles: dataFiles.filter((f) => !matchedMonitors.has(f)),
+      blockCount: blocks.length,
+      blockAssignment,
+      ambiguous,
       fileFallback
     };
     return configs;
@@ -1296,6 +1642,7 @@
     autoMapGeneric, buildGeneric, parseFile, parseText, readFileAsText, readFileAsArrayBuffer,
     regularise, addCircadianTime, inferLightsOn, classifyDayPhases, dayPhaseMap, assembleAnimals,
     detectDeadRun, analysisMask, maskStats, parseMetadata, suggestMetadataMapping, applyMetadata,
+    metadataBlocks, metadataMonitorKeys, suggestMetadataBlockMap,
     configsFromDam, configsFromWide, movingFromDistance, inferBinMinutes
   };
 })(window);

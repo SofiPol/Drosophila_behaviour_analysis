@@ -68,7 +68,7 @@ Use the **Dark / Light** button in the header to switch theme; the choice is rem
 
 ### DAM (TriKinetics)
 
-Standard tab-separated monitor files with a date, time, light status and 24 or 32 channel columns. The parser detects the metadata width and light column automatically. Multiple files with the same time grid are merged; animal IDs become `Monitor:Channel`.
+Standard tab-separated monitor files with a date, time, light status and 24 or 32 channel columns. The parser detects the metadata width and light column automatically. Any number of monitor files can be uploaded together: they are merged on absolute time, so monitors started a few seconds or days apart line up on the correct bins (the only requirement is the same bin size). DAM5M files that interleave finer placeholder records with the one-minute counts are reduced to the count rows automatically. Animal IDs become `Monitor:Channel`.
 
 ### Zantiks MWP
 
@@ -89,7 +89,11 @@ Quoted CSV with `RUNTIME`, `UNIT`, `TEMPERATURE`, `L_OR_D`, `DAY`, `HOUR`, `TIME
 
 Upload a CSV with one row per animal. The app automatically detects and links metadata by **file/monitor**, **channel/well/ROI** or **animal ID**. Genotype is carried through to the animal table, exports, group summaries and the statistics grouping menu; group, sex and treatment are linked at the same time. If a metadata file has a genotype but no separate group, genotype becomes the grouping variable.
 
-Use the `exp` column to name an experiment and `replicate` to name a replicate. If `exp` is blank, the source filename is used as the experiment label. Multiple files may be selected together in **Upload data**; they are combined into one analysis table when they share the same bin size and start clock. Different experiment dates and durations are supported, and missing tails are padded with missing values.
+One metadata table can cover many monitors. The file/monitor column is matched loosely: the full file name, a monitor label (`DAM3`, `Monitor 3`, `M3`) or a plain monitor number (`3`) all identify the same monitor, and extensions or paths are ignored. A row with a monitor but no channel applies to every channel of that monitor, so a one-row-per-monitor table works; a table with one row per channel adds the per-animal details. The status line reports how many animals and monitors were linked and names any monitor with no matching metadata. Re-uploading metadata or changing the mapping replaces the previous values instead of leaving stale genotypes behind.
+
+If the table has no monitor column at all but consists of consecutive channel blocks (for example `region_id` 1…32 repeated once per plate), the app detects the blocks and shows a **monitor → block** selector. When the number of blocks and monitors match, blocks are pre-assigned in monitor order (by the number in the file name when present, otherwise upload order) — check the mapping before analysing and change any selector if needed. A `status` column with `A`/`D` values is used to include or exclude the corresponding channel automatically.
+
+Use the `exp` column to name an experiment and `replicate` to name a replicate. If `exp` is blank, the source filename is used as the experiment label. Multiple files may be selected together in **Upload data**; they are combined into one analysis table when they share the same bin size, and monitors are aligned on absolute time. Different experiment dates and durations are supported, and missing tails are padded with missing values.
 
 The **Data scope** bar below the navigation lets you tick any combination of experiments and replicates. Leaving all boxes ticked combines everything; untick an outlier experiment or replicate to exclude it from every graph and statistic. The scope is recorded in the manifest. The animal table also shows editable **Experiment** and **Replicate** columns.
 
