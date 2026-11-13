@@ -6,7 +6,7 @@
 (function (global) {
   'use strict';
 
-  const VERSION = '2.8.2';
+  const VERSION = '2.9.0';
   const TAU = Math.PI * 2;
 
   /* ============================ basic helpers ============================ */

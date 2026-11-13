@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
-<link rel="icon" type="image/svg+xml" href="assets/insect-mark.svg?v=2.8.2">
-<link rel="stylesheet" href="css/styles.css?v=2.8.2">
+<link rel="icon" type="image/svg+xml" href="assets/insect-mark.svg?v=2.9.0">
+<link rel="stylesheet" href="css/styles.css?v=2.9.0">
 </head>
 <body>
 <div class="app-shell">
@@ -83,7 +83,7 @@
           <p class="privacy-note">Nothing is uploaded to a server. The page runs entirely client-side.</p>
         </div>
         <figure class="hero-figure" aria-hidden="true">
-          <img class="hero-figure-insect" src="assets/insect-drawing.png?v=2.8.2" alt="">
+          <img class="hero-figure-insect" src="assets/insect-drawing.png?v=2.9.0" alt="">
           <figcaption><span>one animal</span><span>every rhythm</span></figcaption>
         </figure>
       </div>
@@ -109,7 +109,7 @@
             <div><h2>How it works</h2><p>Four steps, no build tools.</p></div>
           </header>
           <ol class="how-list">
-            <li><span>01</span><div><strong>Import</strong><p>DAM, Zantiks, ethoscope or generic CSV/Excel. Dates and light status are read from the file.</p></div></li>
+            <li><span>01</span><div><strong>Import</strong><p>DAM, Zantiks, ethoscope or generic CSV/Excel. Dates come from the file; if a DAM export has no light channel, describe the photoperiod and the day DD began in Settings.</p></div></li>
             <li><span>02</span><div><strong>Check</strong><p>Review animals, group assignment, dead/missing flags and the analysis window.</p></div></li>
             <li><span>03</span><div><strong>Analyse</strong><p>Activity, sleep, bouts, P(wake)/P(doze), periodograms, phase, anticipation, statistics.</p></div></li>
             <li><span>04</span><div><strong>Export</strong><p>Summary tables, figures, an HTML/PDF report and a reproducibility manifest.</p></div></li>
@@ -174,13 +174,24 @@
             </label>
             <label>Cycle length T (h)<input type="number" id="set-cycle" value="24" min="16" max="32" step="0.5"></label>
             <label>Lights-on clock (ZT0)<input type="time" id="set-lights-on" value="08:00"></label>
+            <label>Light data
+              <select id="set-light-mode">
+                <option value="auto">Read from file</option>
+                <option value="ld">Manual LD (no DD)</option>
+                <option value="ld-dd">Manual LD → DD</option>
+                <option value="dd">Manual constant DD</option>
+              </select>
+            </label>
+            <label>Photoperiod light (h)<input type="number" id="set-photoperiod" value="12" min="0" max="24" step="0.5"></label>
+            <label>DD starts on day<input type="number" id="set-dd-day" placeholder="e.g. 6" min="1" step="1"></label>
             <label>Phase
               <select id="set-phase"><option value="ALL">All days</option><option value="LD">LD only</option><option value="DD">DD only</option><option value="LL">LL only</option></select>
             </label>
             <label>First analysis day<input type="number" id="set-start-day" value="1" min="0" step="1"></label>
             <label>Last analysis day<input type="number" id="set-end-day" value="999" min="1" step="1"></label>
           </div>
-          <p class="hint">Partial days are excluded from daily statistics. Lights-on is inferred from the light column; set it manually for DD-only recordings.</p>
+          <p class="hint" id="light-hint">Light is read from the file. DAM monitors record activity only, so choose a manual schedule to describe the photoperiod and the day DD begins.</p>
+          <p class="hint">Partial days are excluded from daily statistics.</p>
         </article>
 
         <article class="card">
@@ -426,23 +437,44 @@
       </article>
       <div class="kpi-grid" id="circ-kpis"></div>
       <article class="card"><header class="card-head"><span class="card-index">A</span><div><h3>Periodogram</h3><p>Chi-square power is Qp − threshold; the dotted line is zero.</p></div></header><div class="chart tall" id="circ-periodogram"></div></article>
-      <div class="grid-2">
-        <article class="card"><header class="card-head"><span class="card-index">B</span><div><h3>Period distribution</h3><p>Rhythmic animals only.</p></div></header><div class="chart" id="circ-distribution"></div></article>
-        <article class="card"><header class="card-head"><span class="card-index">C</span><div><h3>Autocorrelation</h3><p>RI is the height of the third peak; dotted line = 0.3.</p></div></header><div class="chart" id="circ-autocorr"></div></article>
-      </div>
-      <article class="card"><header class="card-head"><span class="card-index">D</span><div><h3>Population periodogram</h3><p>Mean ± SEM across animals.</p></div></header><div class="chart" id="circ-population"></div></article>
       <article class="card">
-        <header class="card-head"><span class="card-index">E</span><div><h3>Group rhythmicity</h3></div>
+        <header class="card-head">
+          <span class="card-index">B</span>
+          <div><h3>Single fly · actogram and periodogram</h3><p>Step through animals to judge rhythmicity by eye. The period line and the peak marker use that animal's own τ.</p></div>
+          <span class="badge" id="circ-ind-verdict">—</span>
+        </header>
+        <div class="controls">
+          <label>Animal<select id="circ-ind-animal"></select></label>
+          <button class="btn ghost small" id="circ-ind-prev" type="button">← Previous</button>
+          <button class="btn ghost small" id="circ-ind-next" type="button">Next →</button>
+          <label class="check-label"><input type="checkbox" id="circ-ind-double" checked> Double plot</label>
+          <label class="check-label"><input type="checkbox" id="circ-ind-tau" checked> Period line</label>
+          <label class="check-label"><input type="checkbox" id="circ-ind-onsets"> Onset markers</label>
+          <button class="btn ghost small" data-export="circ-ind-figure" type="button">Export figure</button>
+        </div>
+        <p class="hint" id="circ-ind-note">Run the periodograms to explore individual animals.</p>
+        <div class="grid-2" id="circ-ind-figure">
+          <div class="chart actogram-profile" id="circ-ind-actogram"></div>
+          <div class="chart" id="circ-ind-periodogram"></div>
+        </div>
+      </article>
+      <div class="grid-2">
+        <article class="card"><header class="card-head"><span class="card-index">C</span><div><h3>Period distribution</h3><p>Rhythmic animals only.</p></div></header><div class="chart" id="circ-distribution"></div></article>
+        <article class="card"><header class="card-head"><span class="card-index">D</span><div><h3>Autocorrelation</h3><p>RI is the height of the third peak; dotted line = 0.3.</p></div></header><div class="chart" id="circ-autocorr"></div></article>
+      </div>
+      <article class="card"><header class="card-head"><span class="card-index">E</span><div><h3>Population periodogram</h3><p>Mean ± SEM across animals.</p></div></header><div class="chart" id="circ-population"></div></article>
+      <article class="card">
+        <header class="card-head"><span class="card-index">F</span><div><h3>Group rhythmicity</h3></div>
           <button class="btn tiny ghost" id="btn-export-period" type="button">Export CSV</button>
         </header>
         <div class="table-wrap" id="circ-summary-table"></div>
       </article>
       <article class="card">
-        <header class="card-head"><span class="card-index">F</span><div><h3>Per-animal period results</h3></div></header>
+        <header class="card-head"><span class="card-index">G</span><div><h3>Per-animal period results</h3></div></header>
         <div class="table-wrap tall" id="circ-results-table"></div>
       </article>
       <article class="card">
-        <header class="card-head"><span class="card-index">G</span><div><h3>Validation</h3><p>Synthetic signals with known periods (23.5, 24, 25, 26 h) and property tests for sleep scoring.</p></div>
+        <header class="card-head"><span class="card-index">H</span><div><h3>Validation</h3><p>Synthetic signals with known periods (23.5, 24, 25, 26 h) and property tests for sleep scoring.</p></div>
           <button class="btn ghost small" id="btn-run-validation" type="button">Run validation</button>
         </header>
         <div class="grid-2">
@@ -646,23 +678,24 @@
           </div>
         </article>
         <article class="card">
-          <header class="card-head"><span class="card-index">B</span><div><h3>Figures</h3><p>PNG at high scale or SVG.</p></div></header>
+          <header class="card-head"><span class="card-index">B</span><div><h3>Figures</h3><p>Raster (PNG, BMP, JPEG) or vector (SVG).</p></div></header>
           <div class="controls">
             <label>Figure<select id="export-figure-select">
               <option value="profile-main">24-hour profile</option>
               <option value="stat-box">Box plot</option>
               <option value="circ-periodogram">Periodogram</option>
+              <option value="circ-ind-figure">Single fly (actogram + periodogram)</option>
               <option value="actogram-grid">Actograms</option>
               <option value="sleep-profile-chart">Sleep profile</option>
               <option value="phase-circular">Circular phase</option>
               <option value="surv-curve">Survival curves</option>
               <option value="surv-bar">% alive at end</option>
             </select></label>
-            <label>Format<select id="export-format"><option value="png">PNG</option><option value="svg">SVG</option></select></label>
-            <label>Scale<select id="export-scale"><option value="2">2×</option><option value="3" selected>3×</option><option value="4">4×</option></select></label>
+            <label>Format<select id="export-format"><option value="png">PNG</option><option value="svg">SVG (vector)</option><option value="bmp">BMP</option><option value="jpeg">JPEG</option></select></label>
+            <label>Scale<select id="export-scale"><option value="1">1×</option><option value="2">2×</option><option value="3" selected>3×</option><option value="4">4×</option></select></label>
             <button class="btn primary" id="btn-export-figure" type="button">Export figure</button>
           </div>
-          <p class="hint">For multi-panel grids, PNG composes all plots; SVG is available for single figures.</p>
+          <p class="hint">SVG is true vector output — open it in Illustrator, Inkscape or PowerPoint when the figure needs editing. Scale applies to raster formats (PNG, BMP, JPEG) and is ignored for SVG. Multi-panel grids are composed into one image for raster formats; SVG is offered for single figures only. The per-figure <em>Export</em> buttons use the format chosen here.</p>
         </article>
       </div>
       <article class="card">
@@ -690,7 +723,7 @@
       <a href="#video" data-goto="video"><span>11</span>Video</a>
       <a href="#export" data-goto="export"><span>12</span>Export</a>
     </div>
-<div class="footer-meta"><span>Chronobiology Workbench v2.8.2</span><span>Client-side · no data leaves your browser</span></div>
+<div class="footer-meta"><span>Chronobiology Workbench v2.9.0</span><span>Client-side · no data leaves your browser</span></div>
   </footer>
 </div>
 
@@ -716,16 +749,16 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/sql-wasm.js"></script>
-<script src="js/core.js?v=2.8.2"></script>
-<script src="js/stats.js?v=2.8.2"></script>
-<script src="js/importers.js?v=2.8.2"></script>
-<script src="js/sleep.js?v=2.8.2"></script>
-<script src="js/circadian.js?v=2.8.2"></script>
-<script src="js/phase.js?v=2.8.2"></script>
-<script src="js/lifespan.js?v=2.8.2"></script>
-<script src="js/video.js?v=2.8.2"></script>
-<script src="js/charts.js?v=2.8.2"></script>
-<script src="js/sample.js?v=2.8.2"></script>
-<script src="js/app.js?v=2.8.2"></script>
+<script src="js/core.js?v=2.9.0"></script>
+<script src="js/stats.js?v=2.9.0"></script>
+<script src="js/importers.js?v=2.9.0"></script>
+<script src="js/sleep.js?v=2.9.0"></script>
+<script src="js/circadian.js?v=2.9.0"></script>
+<script src="js/phase.js?v=2.9.0"></script>
+<script src="js/lifespan.js?v=2.9.0"></script>
+<script src="js/video.js?v=2.9.0"></script>
+<script src="js/charts.js?v=2.9.0"></script>
+<script src="js/sample.js?v=2.9.0"></script>
+<script src="js/app.js?v=2.9.0"></script>
 </body>
 </html>

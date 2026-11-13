@@ -30,6 +30,7 @@ Every imported file is converted to a regular time grid. The canonical record fo
 ### Time and ZT0
 
 - Lights-on is inferred from the first 0→1 transition in the light column. If the recording is DD-only, set the **Lights-on clock (ZT0)** parameter manually.
+- **Recordings without a light channel.** Some DAM exports record activity only — the import panel then reports no light column, and day/night shading, the LD/DD phase filter, CT and anticipation have nothing to read. Set **Light data** to a manual schedule instead of *Read from file*: *Manual LD* (constant photoperiod), *Manual LD → DD* with the **DD starts on day** field, or *Manual constant DD*. The synthetic light column is written before lights-on, ZT/CT and day phases are derived, so every downstream calculation behaves exactly as if the file had carried light. Days are 1-based and counted from the first ZT0 (lights-on); the resolved calendar time of the first DD day is shown under the controls. Set the analysis window (last day) to the last LD day if τ should be estimated from entrained days only, or to the whole recording for free-running τ.
 - ZT = time since lights-on modulo the cycle length *T*.
 - CT in DD is projected from the last lights-on transition: CT = time since that transition modulo the cycle. Activity in DD is therefore not called “night” solely because the light value is 0; day/night summaries use CT 0–12 / 12–24.
 - Day index = floor((elapsed + start clock − lights-on clock) / T) + 1. Partial days are flagged and excluded from daily statistics by default.
@@ -255,7 +256,9 @@ Missing bins are `NA`; group means use available animals and the n per bin is ex
 - A mean activity-level panel above the actograms shows activity by ZT separately for each genotype (falling back to group when genotype is blank), with SEM error bars, per-genotype colours and night shading.
 - Average actograms normalise each animal before averaging; the app warns that DD groups with different τ should be phase- or τ-aligned.
 - Sleep actograms show sleep state instead of activity.
-- PNG/SVG export; multi-panel PNG composition.
+- Where an animal's own day phases are known, the first DD row is marked with a dashed horizontal rule; a manual light schedule (see §1) supplies those phases when the file has no light column.
+- The Circadian section pairs the selected animal's actogram with that animal's own periodogram: the peak is marked with a diamond, τ is annotated, and the strict-rhythmicity verdict is repeated beside the controls, so the raw activity and the estimate can be inspected together while stepping through animals.
+- Raster export as PNG, BMP or JPEG (multi-panel grids are composed into one image) and vector export as SVG (single figures).
 
 ---
 

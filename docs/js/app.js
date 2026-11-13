@@ -67,6 +67,7 @@
   function defaultSettings() {
     return {
       binMin: 1, cycleLength: 24, lightsOn: '08:00', phase: 'ALL', startDay: 1, endDay: 999,
+      lightMode: 'auto', photoperiod: 12, ddDay: '',
       immobilityThreshold: 0, minSleepMinutes: 5, shortSleepMax: 30, interSleepMax: 60, briefAwakeningMin: 2,
       completeDayFraction: 0.9, deadHours: 24, maxMissing: 0.1, lowActivity: 1,
       primaryMethod: 'chi-square', periodogramBinMin: 30, minPeriod: 16, maxPeriod: 32, step: 0.1,
@@ -95,6 +96,10 @@
     s.binMin = +$('set-bin').value || 1;
     s.cycleLength = +$('set-cycle').value || 24;
     s.lightsOn = $('set-lights-on').value || '08:00';
+    s.lightMode = $('set-light-mode').value || 'auto';
+    const photoperiod = +$('set-photoperiod').value;
+    s.photoperiod = Number.isFinite(photoperiod) ? photoperiod : 12;
+    s.ddDay = String($('set-dd-day').value || '').trim();
     s.phase = $('set-phase').value;
     s.startDay = +$('set-start-day').value || 1;
     s.endDay = +$('set-end-day').value || 999;
@@ -138,6 +143,9 @@
     $('set-bin').value = String(s.binMin);
     $('set-cycle').value = s.cycleLength;
     $('set-lights-on').value = s.lightsOn;
+    $('set-light-mode').value = s.lightMode || 'auto';
+    $('set-photoperiod').value = s.photoperiod == null ? 12 : s.photoperiod;
+    $('set-dd-day').value = s.ddDay == null ? '' : String(s.ddDay);
     $('set-phase').value = s.phase;
     $('set-start-day').value = s.startDay;
     $('set-end-day').value = s.endDay;
@@ -175,14 +183,20 @@
     $('set-act-scale').value = s.actogramScale;
     $('set-double').checked = !!s.doubleActogram;
     updateSettingsSummary();
+    updateLightHint();
   }
   function updateSettingsSummary() {
     const s = state.settings;
+    const sched = I.lightSchedule(s);
+    const lightLabel = sched
+      ? `${sched.label} · ZT0 ${C.formatClock(sched.lightsOnClock)}`
+      : 'read from file';
     const items = [
       ['Bin', `${s.binMin} min`],
       ['Window', `day ${s.startDay} – ${s.endDay === 999 ? 'last' : s.endDay}`],
       ['Phase', s.phase],
       ['ZT0', s.lightsOn],
+      ['Light', lightLabel],
       ['Sleep rule', `≥ ${s.minSleepMinutes} min immobile`],
       ['Immobility', `≤ ${s.immobilityThreshold}`],
       ['Period search', `${s.minPeriod}–${s.maxPeriod} h · ${s.step} h`],
@@ -194,6 +208,52 @@
       ['Time base', s.timeBase]
     ];
     $('settings-summary').innerHTML = items.map(([k, v]) => `<div><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join('');
+  }
+
+  /** Resolve the manual schedule, including the calendar time of the first DD day. */
+  function lightSchedulePreview() {
+    const sched = I.lightSchedule(state.settings);
+    if (!sched) return null;
+    const reg = state.dataset;
+    let when = '';
+    if (reg && reg.startDate instanceof Date && Number.isFinite(sched.ddDay)) {
+      const cycle = state.settings.cycleLength || 24;
+      const startClock = reg.startClockHour ?? 0;
+      // ZT0 of day N happens (N-1) cycles after the first ZT0 of the recording.
+      const hoursFromStart = (sched.ddDay - 1) * cycle - startClock + sched.lightsOnClock;
+      when = C.formatDateTime(new Date(reg.startDate.getTime() + hoursFromStart * 3600000));
+    }
+    return { sched, when };
+  }
+
+  function updateLightHint() {
+    const el = $('light-hint');
+    if (!el) return;
+    const s = state.settings;
+    const manual = !!s.lightMode && s.lightMode !== 'auto';
+    const photoInput = $('set-photoperiod');
+    const ddInput = $('set-dd-day');
+    if (photoInput) photoInput.disabled = !manual || s.lightMode === 'dd';
+    if (ddInput) ddInput.disabled = s.lightMode !== 'ld-dd';
+    if (!manual) {
+      el.textContent = 'Light is read from the file. DAM monitors record activity only, so choose a manual schedule to describe the photoperiod and the day DD begins.';
+      return;
+    }
+    const preview = lightSchedulePreview();
+    if (!preview) return;
+    const { sched, when } = preview;
+    const photoperiod = `${sched.photoperiod}:${(24 - sched.photoperiod).toFixed(1).replace(/\.0$/, '')}`;
+    let text;
+    if (s.lightMode === 'dd') {
+      text = 'The whole recording is analysed as constant darkness (light = 0 in every bin).';
+    } else if (s.lightMode === 'ld') {
+      text = `Every day is LD ${photoperiod}; there is no DD phase.`;
+    } else if (Number.isFinite(sched.ddDay)) {
+      text = `LD ${photoperiod} until day ${sched.ddDay}, then constant darkness${when ? ` (DD begins ${when})` : ''}.`;
+    } else {
+      text = `No DD start day is set, so every day is treated as LD ${photoperiod}.`;
+    }
+    el.textContent = `${text} Days are counted from the first ZT0 (lights-on) of the recording. Apply the settings to recompute ZT/CT, day phases and shading.`;
   }
 
   /* ============================ UI helpers ============================ */
@@ -1033,6 +1093,18 @@
   async function buildDataset() {
     if (!state.dataset) throw new Error('Load and use a dataset first.');
     readSettingsUI();
+    // Rebuild ZT/CT/day and the light column so edits to the light schedule or
+    // the lights-on clock reach the analyser without re-importing the files.
+    if (state.parsedWide) {
+      try {
+        const reg = I.regularise(state.parsedWide, { binMin: state.settings.binMin });
+        I.addCircadianTime(reg, state.settings);
+        state.dataset = reg;
+        if (Math.abs(reg.binMinutes - state.settings.binMin) > 1e-9) state.settings.binMin = reg.binMinutes;
+      } catch (e) {
+        console.warn('Could not rebuild the time base; using the imported dataset.', e);
+      }
+    }
     state.animals = I.assembleAnimals(state.dataset, state.configs, state.settings);
     if (!state.animals.length) throw new Error('No animals are included. Tick at least one animal in the table.');
     state.fullAnimals = [];
@@ -1632,7 +1704,12 @@
 
   /* ============================ render: circadian ============================ */
   function renderCircadian() {
-    if (!state.circadian.length) { state.dirty.circadian = false; return; }
+    if (!state.circadian.length) {
+      state.dirty.circadian = false;
+      CH.clear($('circ-ind-actogram'), 'Run the periodograms to explore individual animals.');
+      CH.clear($('circ-ind-periodogram'), '');
+      return;
+    }
     if ($('circ-primary').value !== state.settings.primaryMethod) $('circ-primary').value = state.settings.primaryMethod;
     if ($('set-primary').value !== state.settings.primaryMethod) $('set-primary').value = state.settings.primaryMethod;
     const groupFilter = $('circ-group').value;
@@ -1675,7 +1752,101 @@
       r.chiSquare && r.chiSquare.peakPower >= 0 ? 'yes' : 'no', r.rhythmic ? 'yes' : 'no', r.consensusFlag ? 'flag' : ''
     ]);
     table('circ-results-table', ['Animal', 'Group', 'τ primary', 'τ χ²', 'τ LS', 'τ AC', 'τ FFT', 'τ cosinor', 'τ onset', 'A', '%R', 'Power', 'Width', 'RI', 'RS', 'Significant', 'Rhythmic', 'Consensus'], rows, { numeric: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] });
+    populateCircadianAnimalSelect();
+    renderCircadianIndividual();
     state.dirty.circadian = false;
+  }
+
+  /* --------- circadian: one animal, actogram beside its periodogram --------- */
+  function circadianAnimalResults() {
+    const groupFilter = $('circ-group') ? $('circ-group').value : '__all';
+    const inGroup = state.circadian.filter((r) => r.animal && (groupFilter === '__all' || r.animal.group === groupFilter));
+    return inGroup.length ? inGroup : state.circadian.filter((r) => r.animal);
+  }
+
+  function populateCircadianAnimalSelect() {
+    const sel = $('circ-ind-animal');
+    if (!sel) return;
+    const previous = sel.value;
+    const list = circadianAnimalResults();
+    sel.innerHTML = list
+      .map((r) => `<option value="${esc(r.animal.id)}">${esc(r.animal.id)} · ${esc(r.animal.group)}</option>`)
+      .join('');
+    if (previous && list.some((r) => r.animal.id === previous)) sel.value = previous;
+    else if (list.length) sel.value = list[0].animal.id;
+  }
+
+  function stepCircadianAnimal(delta) {
+    const sel = $('circ-ind-animal');
+    if (!sel || !sel.options.length) return;
+    const n = sel.options.length;
+    sel.selectedIndex = ((Math.max(0, sel.selectedIndex) + delta) % n + n) % n;
+    renderCircadianIndividual();
+  }
+
+  function renderCircadianIndividual() {
+    const sel = $('circ-ind-animal');
+    const actEl = $('circ-ind-actogram');
+    const perEl = $('circ-ind-periodogram');
+    const note = $('circ-ind-note');
+    const verdict = $('circ-ind-verdict');
+    if (!sel || !actEl || !perEl) return;
+    const result = state.circadian.find((r) => r.animal && r.animal.id === sel.value);
+    if (!result) {
+      CH.clear(actEl, 'Run the periodograms to explore individual animals.');
+      CH.clear(perEl, '');
+      if (note) note.textContent = 'Run the periodograms to explore individual animals.';
+      if (verdict) verdict.textContent = '—';
+      return;
+    }
+    const animal = result.animal;
+    const settings = state.settings;
+    const double = $('circ-ind-double') ? $('circ-ind-double').checked : true;
+    const showPeriodLine = $('circ-ind-tau') ? $('circ-ind-tau').checked : true;
+    const showOnsets = $('circ-ind-onsets') ? $('circ-ind-onsets').checked : false;
+    let ddDay = null;
+    const pm = state.phaseMap.get(animal.id);
+    if (pm) for (const [d, p] of pm) if (p === 'DD') { ddDay = d; break; }
+    let markers = null;
+    if (showOnsets) {
+      const mask = I.analysisMask(animal, settings, state.phaseMap);
+      const oo = PL.onsetOffset(animal, mask, settings);
+      markers = (oo.onsetEntries || []).map((e) => ({ ...e, type: 'onset' }))
+        .concat((oo.offsetEntries || []).map((e) => ({ ...e, type: 'offset' })));
+    }
+    const tau = C.isNum(result.tau) ? result.tau : null;
+    CH.actogram(actEl, animal, {
+      binMin: settings.actogramBin, double, scaleMode: settings.actogramScale,
+      title: `${animal.id} · ${animal.group}`, markers,
+      periodTau: showPeriodLine ? tau : null,
+      showPeriodLine: showPeriodLine && C.isNum(tau), ddDay
+    });
+    CH.singlePeriodogramChart(perEl, result, {
+      method: $('circ-method').value,
+      minPeriod: settings.minPeriod, maxPeriod: settings.maxPeriod, title: ''
+    });
+    if (verdict) {
+      verdict.textContent = result.error
+        ? 'No result'
+        : `${result.rhythmic ? 'Rhythmic' : 'Not rhythmic'}${C.isNum(tau) ? ` · τ ${fmt(tau, 2)} h` : ''}`;
+    }
+    if (note) {
+      if (result.error) {
+        note.textContent = result.error;
+        return;
+      }
+      const cs = result.chiSquare && !result.chiSquare.error ? result.chiSquare : null;
+      const ac = result.autocorrelation && !result.autocorrelation.error ? result.autocorrelation : null;
+      const bits = [
+        `τ ${fmt(result.tau, 2)} h (${settings.primaryMethod})`,
+        cs ? `χ² power ${fmt(cs.peakPower, 1)}, width ${fmt(cs.peakWidth, 2)} h` : 'χ² unavailable',
+        ac ? `RI ${fmt(ac.RI, 2)}` : 'RI unavailable',
+        result.consensusFlag ? 'methods disagree' : 'methods agree',
+        `strict criteria: ${result.rhythmic ? 'met' : 'not met'}`
+      ];
+      if (ddDay) bits.push(`DD from day ${ddDay}`);
+      note.textContent = bits.join(' · ');
+    }
   }
 
   /* ============================ render: phase ============================ */
@@ -2492,6 +2663,7 @@
       generated: new Date().toISOString(),
       files: state.files.map((f) => ({ name: f.name, size: f.size })),
       dataset: state.parsedWide ? { name: state.parsedWide.name, format: state.parsedWide.format, binMinutes: state.parsedWide.binMinutes } : null,
+      light: state.dataset && state.dataset.lightSource ? state.dataset.lightSource : 'read from file',
       metadata: state.metadata ? {
         file: state.metadataFile,
         rows: state.metadata.rows.length,
@@ -2620,21 +2792,29 @@
 
   /* ============================ export figure ============================ */
   function hasPlot(el) { return !!el && (el.classList.contains('js-plotly-plot') || !!el.querySelector('.js-plotly-plot')); }
+  function figureExportFormat() {
+    const sel = $('export-format');
+    const format = sel ? sel.value : 'png';
+    return format === 'jpeg' ? 'jpeg' : format;
+  }
+  function figureExtension(format) { return format === 'jpeg' ? 'jpg' : format; }
   async function exportSelectedFigure() {
     const id = $('export-figure-select').value;
-    const format = $('export-format').value;
+    const format = figureExportFormat();
     const scale = +$('export-scale').value || 3;
     const el = $(id);
     if (!el) throw new Error('Figure not found.');
     if (!hasPlot(el)) throw new Error('Render that figure first.');
-    await CH.exportFigure(el, `${id}.${format}`, format, scale);
-    toast('Figure exported.', 'success');
+    await CH.exportFigure(el, `${id}.${figureExtension(format)}`, format, scale);
+    toast(`Figure exported as ${format.toUpperCase()}.`, 'success');
   }
   async function exportNamedFigure(id) {
     const el = $(id);
     if (!hasPlot(el)) { toast('Render the figure first.', 'error'); return; }
-    await CH.exportFigure(el, `${id}.png`, 'png', 3);
-    toast('Figure exported.', 'success');
+    const format = figureExportFormat();
+    const scale = +($('export-scale') ? $('export-scale').value : 0) || 3;
+    await CH.exportFigure(el, `${id}.${figureExtension(format)}`, format, scale);
+    toast(`Figure exported as ${format.toUpperCase()}.`, 'success');
   }
 
   /* ============================ settings events ============================ */
@@ -2667,6 +2847,8 @@
       syncSettingsUI();
       toast('Defaults restored. Press “Apply settings” to recompute.', 'info');
     }));
+    ['set-light-mode', 'set-photoperiod', 'set-dd-day', 'set-lights-on', 'set-cycle']
+      .forEach((id) => $(id).addEventListener('change', () => { readSettingsUI(); syncSettingsUI(); }));
   }
 
   /* ============================ chart events ============================ */
@@ -2721,6 +2903,11 @@
       if (state.animals.length) await recomputeCircadian();
     }));
     $('circ-method').addEventListener('change', guard(renderCircadian));
+    $('circ-group').addEventListener('change', guard(renderCircadian));
+    $('circ-ind-animal').addEventListener('change', guard(renderCircadianIndividual));
+    $('circ-ind-prev').addEventListener('click', () => stepCircadianAnimal(-1));
+    $('circ-ind-next').addEventListener('click', () => stepCircadianAnimal(1));
+    ['circ-ind-double', 'circ-ind-tau', 'circ-ind-onsets'].forEach((id) => $(id).addEventListener('change', guard(renderCircadianIndividual)));
     $('btn-render-phase').addEventListener('click', guard(renderPhase));
     $('btn-run-stats').addEventListener('click', guard(() => runStats(true)));
     $('btn-run-survival').addEventListener('click', guard(renderSurvival));

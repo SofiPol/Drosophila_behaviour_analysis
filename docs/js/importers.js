@@ -948,6 +948,69 @@
   }
 
   /* ============================ lights-on / ZT / CT ============================ */
+  /**
+   * Parse the manual light schedule used when the recording carries no light
+   * channel (every DAM monitor, and many generic CSVs).
+   *
+   * Modes:
+   *   'auto'  read light from the file (default)
+   *   'ld'    constant LD at the chosen photoperiod
+   *   'ld-dd' LD until the start of `ddDay`, constant darkness afterwards
+   *   'dd'    constant darkness for the whole recording
+   *
+   * `ddDay` is 1-based and counted in ZT days (ZT0 = lights-on), matching the
+   * `day` index that `addCircadianTime()` writes onto each bin. A missing or
+   * empty day means "no DD phase".
+   * @returns {object|null} null when light should be read from the file
+   */
+  function lightSchedule(settings = {}) {
+    const mode = settings.lightMode || 'auto';
+    if (mode === 'auto') return null;
+    const lightsOnClock = C.parseClock(settings.lightsOn, 8);
+    const photoperiodRaw = Number(settings.photoperiod);
+    const photoperiod = Number.isFinite(photoperiodRaw) ? C.clamp(photoperiodRaw, 0, 24) : 12;
+    const ddRaw = Number(settings.ddDay);
+    const ddDay = mode === 'dd'
+      ? 1
+      : (Number.isFinite(ddRaw) && ddRaw >= 1 ? Math.floor(ddRaw) : Infinity);
+    return {
+      mode, lightsOnClock, photoperiod, ddDay,
+      label: mode === 'dd'
+        ? 'constant DD'
+        : mode === 'ld'
+          ? `LD ${photoperiod}:${24 - photoperiod} (no DD)`
+          : `LD ${photoperiod}:${24 - photoperiod} → DD from day ${Number.isFinite(ddDay) ? ddDay : '—'}`,
+      source: 'manual'
+    };
+  }
+
+  /**
+   * Write a synthetic light column onto a regularised dataset.
+   * Called by `addCircadianTime()` so that phase filtering, day/night shading,
+   * CT and anticipation all behave as if the file had a light channel.
+   */
+  function applyLightSchedule(reg, settings = {}) {
+    const sched = lightSchedule(settings);
+    if (!sched) return null;
+    const cycle = settings.cycleLength || 24;
+    const startClock = reg.startClockHour ?? 0;
+    const n = reg.nBins;
+    const light = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const elapsed = reg.tHours[i] + (startClock - sched.lightsOnClock);
+      const day = Math.floor(elapsed / cycle) + 1;
+      if (day >= sched.ddDay) {
+        light[i] = 0;
+      } else {
+        const zt = ((reg.clock[i] - sched.lightsOnClock) % cycle + cycle) % cycle;
+        light[i] = zt < sched.photoperiod ? 1 : 0;
+      }
+    }
+    reg.light = light;
+    reg.lightSource = sched.label;
+    return sched;
+  }
+
   function inferLightsOn(reg, override) {
     let overrideHours = NaN;
     if (typeof override === 'string' && override.includes(':')) overrideHours = C.parseClock(override, NaN);
@@ -969,6 +1032,9 @@
 
   function addCircadianTime(reg, settings = {}) {
     const cycle = settings.cycleLength || 24;
+    // A manual schedule replaces the file's light column (DAM recordings have
+    // none), so it must be written before lights-on and day phases are derived.
+    applyLightSchedule(reg, settings);
     const lightsOn = inferLightsOn(reg, settings.lightsOn);
     const zt = new Array(reg.nBins);
     const day = new Array(reg.nBins);
@@ -1641,6 +1707,7 @@
     parseDam, parseZantiks, zantiksToDam, parseEthoscopeDb, parseEthoscopeCsv,
     autoMapGeneric, buildGeneric, parseFile, parseText, readFileAsText, readFileAsArrayBuffer,
     regularise, addCircadianTime, inferLightsOn, classifyDayPhases, dayPhaseMap, assembleAnimals,
+    lightSchedule, applyLightSchedule,
     detectDeadRun, analysisMask, maskStats, parseMetadata, suggestMetadataMapping, applyMetadata,
     metadataBlocks, metadataMonitorKeys, suggestMetadataBlockMap,
     configsFromDam, configsFromWide, movingFromDistance, inferBinMinutes

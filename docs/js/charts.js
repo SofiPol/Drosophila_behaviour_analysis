@@ -873,8 +873,66 @@
     plot(el, traces, layout);
   }
 
-  function periodDistributionChart(el, results, opts = {}) {
-    const rows = results.filter((r) => r && !r.error && C.isNum(r.tau) && r.rhythmic);
+  /**
+   * Periodogram of a single animal with its peak marked. Paired with that
+   * animal's actogram so rhythmicity can be judged from the raw data and the
+   * estimate at the same time.
+   */
+  function singlePeriodogramChart(el, result, opts = {}) {
+    if (!result || result.error) {
+      clear(el, (result && result.error) || 'No periodogram for this animal.');
+      return;
+    }
+    const method = opts.method || 'chi-square';
+    if (method === 'autocorrelation') {
+      autocorrelationChart(el, [result], { title: opts.title || '' });
+      return;
+    }
+    const key = method === 'lomb-scargle' ? 'lombScargle' : method === 'fft' ? 'fft' : 'chiSquare';
+    const s = result[key];
+    if (!s || s.error || !(s.periods || []).length) {
+      clear(el, (s && s.error) || 'No periodogram for this animal.');
+      return;
+    }
+    const isChi = key === 'chiSquare';
+    const y = isChi ? s.qp.map((v, i) => v - s.threshold[i]) : s.power.slice();
+    const color = C.groupColor(0);
+    const traces = [{
+      x: s.periods, y, mode: 'lines', showlegend: false,
+      line: { color, width: 2.4 },
+      hovertemplate: 'Period %{x:.2f} h<br>Power %{y:.2f}<extra></extra>'
+    }];
+    let label = result.animal ? `${result.animal.id}` : '';
+    if (C.isNum(result.tau)) {
+      let idx = 0;
+      for (let i = 1; i < s.periods.length; i++) {
+        if (Math.abs(s.periods[i] - result.tau) < Math.abs(s.periods[idx] - result.tau)) idx = i;
+      }
+      traces.push({
+        x: [s.periods[idx]], y: [y[idx]], mode: 'markers', showlegend: false, hoverinfo: 'skip',
+        marker: { symbol: 'diamond', size: 12, color: THEME.accent, line: { width: 1.5, color: THEME.paper } }
+      });
+      label = `${label ? label + ' · ' : ''}τ ${result.tau.toFixed(2)} h`;
+    }
+    const layout = baseLayout(opts.title || '', { showlegend: false });
+    layout.xaxis.title.text = 'Period (h)';
+    layout.yaxis.title.text = isChi ? 'Power (Qp − threshold)' : key === 'lombScargle' ? 'Power (PN)' : 'Power';
+    layout.xaxis.range = [opts.minPeriod ?? 16, opts.maxPeriod ?? 32];
+    layout.height = opts.height || 420;
+    layout.shapes = isChi ? [{
+      type: 'line', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 0, y1: 0,
+      line: { color: 'rgba(91,107,122,0.5)', width: 1, dash: 'dot' }
+    }] : [];
+    if (label) {
+      layout.annotations = [{
+        xref: 'paper', yref: 'paper', x: 0.99, y: 1.03, xanchor: 'right', yanchor: 'bottom',
+        text: label, showarrow: false, font: { family: MONO, size: 12, color: THEME.ink }
+      }];
+    }
+    plot(el, traces, layout);
+  }
+
+  function periodDistributionChart(el, results, opts = {}) {    const rows = results.filter((r) => r && !r.error && C.isNum(r.tau) && r.rhythmic);
     if (!rows.length) { clear(el, 'No rhythmic animals to plot.'); return; }
     const groups = C.unique(rows.map((r) => r.animal.group));
     const data = groups.map((g, gi) => {
@@ -1151,47 +1209,146 @@
   }
 
   /* ============================ export ============================ */
-  async function figureToDataURL(el, format = 'png', scale = 2) {
-    const plots = el.classList && el.classList.contains('js-plotly-plot')
-      ? [el] : Array.from(el.querySelectorAll('.js-plotly-plot'));
+  function plotNodes(el) {
+    const plots = el && el.classList && el.classList.contains('js-plotly-plot')
+      ? [el] : Array.from((el || document).querySelectorAll('.js-plotly-plot'));
     if (!plots.length) throw new Error('No figure found in this panel.');
-    if (plots.length === 1) {
-      return Plotly.toImage(plots[0], {
-        format: format === 'svg' ? 'svg' : 'png',
-        width: plots[0].clientWidth || 900,
-        height: plots[0].clientHeight || 520,
-        scale: format === 'svg' ? 1 : scale
-      });
-    }
-    if (format === 'svg') throw new Error('SVG export is available for single figures; choose PNG for a grid.');
-    const cols = 3;
-    const rows = Math.ceil(plots.length / cols);
-    const cellW = plots[0].clientWidth || 360;
-    const cellH = plots[0].clientHeight || 260;
+    return plots;
+  }
+
+  function loadImage(url) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = () => rej(new Error('The figure could not be rasterised.'));
+      img.src = url;
+    });
+  }
+
+  /** Rasterise one or several Plotly panels into a single canvas. */
+  async function composeCanvas(plots, scale = 2) {
+    const single = plots.length === 1;
+    const cols = single ? 1 : Math.min(3, plots.length);
+    const rows = single ? 1 : Math.ceil(plots.length / cols);
+    const cellW = Math.max(1, Math.round(plots[0].clientWidth || 900));
+    const cellH = Math.max(1, Math.round(plots[0].clientHeight || 520));
     const canvas = document.createElement('canvas');
-    canvas.width = cols * cellW * scale;
-    canvas.height = rows * cellH * scale;
+    canvas.width = Math.round(cols * cellW * scale);
+    canvas.height = Math.round(rows * cellH * scale);
+    if (!canvas.width || !canvas.height) throw new Error('The figure has no size yet — render it first.');
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = THEME.paper;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     for (let i = 0; i < plots.length; i++) {
-      const imgUrl = await Plotly.toImage(plots[i], { format: 'png', width: cellW, height: cellH, scale });
-      const img = new Image();
-      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = imgUrl; });
+      const url = await Plotly.toImage(plots[i], { format: 'png', width: cellW, height: cellH, scale });
+      const img = await loadImage(url);
       const col = i % cols, row = Math.floor(i / cols);
       ctx.drawImage(img, col * cellW * scale, row * cellH * scale, cellW * scale, cellH * scale);
     }
-    return canvas.toDataURL('image/png');
+    return canvas;
+  }
+
+  /**
+   * 24-bit uncompressed BMP. No browser can encode BMP natively, so the
+   * rasterised canvas is written out by hand: little-endian headers, bottom-up
+   * rows, BGR order and 4-byte row padding.
+   */
+  function canvasToBmpBlob(canvas) {
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    const pixels = ctx.getImageData(0, 0, width, height).data;
+    const rowBytes = width * 3;
+    const padding = (4 - (rowBytes % 4)) % 4;
+    const imageSize = (rowBytes + padding) * height;
+    const fileSize = 54 + imageSize;
+    const buffer = new ArrayBuffer(fileSize);
+    const view = new DataView(buffer);
+    const bytes = new Uint8Array(buffer);
+    view.setUint8(0, 0x42); // 'B'
+    view.setUint8(1, 0x4D); // 'M'
+    view.setUint32(2, fileSize, true);
+    view.setUint32(10, 54, true);         // pixel data offset
+    view.setUint32(14, 40, true);         // BITMAPINFOHEADER size
+    view.setInt32(18, width, true);
+    view.setInt32(22, height, true);      // positive height = bottom-up
+    view.setUint16(26, 1, true);          // planes
+    view.setUint16(28, 24, true);         // bits per pixel
+    view.setUint32(30, 0, true);          // BI_RGB, no compression
+    view.setUint32(34, imageSize, true);
+    view.setInt32(38, 2835, true);        // 72 dpi
+    view.setInt32(42, 2835, true);
+    let p = 54;
+    for (let y = height - 1; y >= 0; y--) {
+      let o = y * width * 4;
+      for (let x = 0; x < width; x++, o += 4) {
+        bytes[p++] = pixels[o + 2];
+        bytes[p++] = pixels[o + 1];
+        bytes[p++] = pixels[o];
+      }
+      for (let k = 0; k < padding; k++) bytes[p++] = 0;
+    }
+    return new Blob([buffer], { type: 'image/bmp' });
+  }
+
+  function dataUrlToBlob(url) {
+    const [head, body] = String(url).split(',');
+    const mime = (head.match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
+    if (!/;base64/i.test(head)) return new Blob([decodeURIComponent(body)], { type: mime });
+    const bin = atob(body);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  }
+
+  function blobToDataURL(blob) {
+    return new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.onerror = () => rej(fr.error || new Error('The figure could not be read back.'));
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  /**
+   * Export a panel as a Blob.
+   * @param {string} format 'png' | 'svg' (vector) | 'bmp' | 'jpeg'
+   */
+  async function figureToBlob(el, format = 'png', scale = 3) {
+    const fmt = String(format || 'png').toLowerCase().replace('jpg', 'jpeg');
+    const plots = plotNodes(el);
+    if (fmt === 'svg') {
+      if (plots.length > 1) throw new Error('SVG export is available for single figures; choose PNG, BMP or JPEG for a grid.');
+      const p = plots[0];
+      const url = await Plotly.toImage(p, {
+        format: 'svg',
+        width: Math.round(p.clientWidth || 900),
+        height: Math.round(p.clientHeight || 520)
+      });
+      return dataUrlToBlob(url);
+    }
+    const canvas = await composeCanvas(plots, Math.max(1, Number(scale) || 1));
+    if (fmt === 'bmp') return canvasToBmpBlob(canvas);
+    const mime = fmt === 'jpeg' ? 'image/jpeg' : 'image/png';
+    const blob = await new Promise((res) => canvas.toBlob(res, mime, 0.95));
+    if (!blob) throw new Error('The browser could not encode this figure; try a smaller scale.');
+    return blob;
+  }
+
+  async function figureToDataURL(el, format = 'png', scale = 2) {
+    return blobToDataURL(await figureToBlob(el, format, scale));
   }
 
   async function exportFigure(el, filename, format = 'png', scale = 3) {
-    const url = await figureToDataURL(el, format, scale);
+    const blob = await figureToBlob(el, format, scale);
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
   }
 
   function resizeAll(root) {
@@ -1208,9 +1365,9 @@
     THEME, baseLayout, plot, clear, darkFractions, darkIntervalShapes,
     profileChart, activityProfileChart, sleepArchitectureChart, transitionChart, sleepCategoryChart, circularChart,
     actogramMatrix, actogram, actogramCursor, averageActogram, sleepActogram, actogramScaling,
-    rasterChart, periodogramChart, periodDistributionChart, autocorrelationChart,
+    rasterChart, periodogramChart, singlePeriodogramChart, periodDistributionChart, autocorrelationChart,
     boxPlot, barSummaryChart, timelineChart, histogramChart, multiBoxPlot,
     populationChart, profileComparisonChart, survivalChart, aliveAtEndChart,
-    figureToDataURL, exportFigure, resizeAll, periodogramSeries, describeGroups, setTheme
+    figureToDataURL, figureToBlob, canvasToBmpBlob, exportFigure, resizeAll, periodogramSeries, describeGroups, setTheme
   };
 })(window);

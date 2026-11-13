@@ -50,15 +50,15 @@ A workflow is included at `.github/workflows/pages.yml`. Set **Settings → Page
 | Section | Analysis |
 |---|---|
 | **01 Import** | DAM (24/32 channels, multiple monitors), Zantiks MWP, generic CSV/TSV/Excel (wide or long), ethoscope SQLite/CSV. Multiple behavioural files can be uploaded together; animal table, automatic metadata join (including genotype, experiment and replicate), QC flags and group assignment. |
-| **02 Settings** | Analysis bin, cycle length, ZT0, phase window, sleep thresholds, dead/missing rules, period search range, rhythmic criteria, anticipation/onset parameters, rebound windows, display options. |
+| **02 Settings** | Analysis bin, cycle length, ZT0, light schedule (read from file, manual LD, manual LD→DD with the day DD starts, or constant DD — for DAM recordings with no light channel), phase window, sleep thresholds, dead/missing rules, period search range, rhythmic criteria, anticipation/onset parameters, rebound windows, display options. |
 | **03 Overview** | KPIs, group summary, recording timeline, activity profile, QC table. |
 | **04 Actograms** | Individual and group-average single/double-plotted bar actograms with explicit day/night shading and a light-schedule bar above each plot; optional period line, onset markers, sleep actogram, custom binning and scaling; mean activity-by-ZT panel with SEM separated by genotype. |
 | **05 Profiles** | Activity, sleep, P(wake), P(doze), bout initiation/length, activity per awake minute; bars or lines, SEM/SD/95% CI, normalisation, circular view, raster. |
 | **06 Sleep** | Standard ≥5-min sleep, bout categories (short/intermediate/long), latency, WASO, fragmentation, brief awakenings, P(wake)/P(doze), bout distribution, architecture by hour, rebound. |
-| **07 Circadian** | Chi-square periodogram (Sokolove–Bushell), Lomb–Scargle, autocorrelation (RI/RS), FFT, cosinor and onset regression; consensus flags, population periodograms, synthetic validation and property tests. |
+| **07 Circadian** | Chi-square periodogram (Sokolove–Bushell), Lomb–Scargle, autocorrelation (RI/RS), FFT, cosinor and onset regression; consensus flags, population periodograms, a single-fly view pairing one animal's actogram with its own periodogram (peak marker, τ annotation, rhythmic verdict, previous/next navigation), synthetic validation and property tests. |
 | **08 Phase** | IS, IV, M10, L5, relative amplitude, centre of gravity, acrophase, M/E peaks, onset/offset, day/night ratio, MAI/EAI anticipation indices. |
 | **09 Statistics** | Shapiro–Wilk, Welch/Student t, Mann–Whitney, ANOVA, Kruskal–Wallis, Dunn, pairwise corrected tests, Fisher exact/chi-square, Cohen's d and rank-biserial effect sizes, profile permutation tests. |
-| **10 Export** | Tidy CSVs (`animals_summary`, `time_series`, `bouts`, `periodograms`, `profiles`, `group_stats`, `phase_metrics`), figures PNG/SVG, HTML report, print-to-PDF and a ZIP package with `manifest.json`. |
+| **10 Export** | Tidy CSVs (`animals_summary`, `time_series`, `bouts`, `periodograms`, `profiles`, `group_stats`, `phase_metrics`), figures as PNG, BMP, JPEG or SVG (vector), HTML report, print-to-PDF and a ZIP package with `manifest.json`. |
 
 Use the **Dark / Light** button in the header to switch theme; the choice is remembered in the browser. Charts use a near-square canvas and the vibrant Okabe–Ito-derived palette, with legends above the overview timeline and activity profile.
 
@@ -68,7 +68,7 @@ Use the **Dark / Light** button in the header to switch theme; the choice is rem
 
 ### DAM (TriKinetics)
 
-Standard tab-separated monitor files with a date, time, light status and 24 or 32 channel columns. The parser detects the metadata width and light column automatically. Any number of monitor files can be uploaded together: they are merged on absolute time, so monitors started a few seconds or days apart line up on the correct bins (the only requirement is the same bin size). DAM5M files that interleave finer placeholder records with the one-minute counts are reduced to the count rows automatically. Animal IDs become `Monitor:Channel`.
+Standard tab-separated monitor files with a date, time, light status and 24 or 32 channel columns. The parser detects the metadata width and light column automatically. When a monitor file has no usable light channel (no light field, or a field that never changes), the import panel reports it; set **Light data** in Settings to a manual schedule — constant LD, LD→DD with the day DD started, or constant DD — and every panel gains the day/night shading and LD/DD phase filter it would have had. Any number of monitor files can be uploaded together: they are merged on absolute time, so monitors started a few seconds or days apart line up on the correct bins (the only requirement is the same bin size). DAM5M files that interleave finer placeholder records with the one-minute counts are reduced to the count rows automatically. Animal IDs become `Monitor:Channel`.
 
 ### Zantiks MWP
 
