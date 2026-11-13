@@ -258,7 +258,7 @@ Missing bins are `NA`; group means use available animals and the n per bin is ex
 - Sleep actograms show sleep state instead of activity.
 - Where an animal's own day phases are known, the first DD row is marked with a dashed horizontal rule; a manual light schedule (see §1) supplies those phases when the file has no light column.
 - The Circadian section pairs the selected animal's actogram with that animal's own periodogram: the peak is marked with a diamond, τ is annotated, and the strict-rhythmicity verdict is repeated beside the controls, so the raw activity and the estimate can be inspected together while stepping through animals.
-- Raster export as PNG, BMP or JPEG (multi-panel grids are composed into one image) and vector export as SVG (single figures).
+- Raster export as PNG, BMP or JPEG (multi-panel grids are composed into one image) and vector export as PDF (one page sized to the figure) or SVG (single figures). PDF is written locally by `pdfexport.js`, sets text in Helvetica/Times so nothing is missing when the file is opened in Illustrator or Inkscape, and keeps every mark as a path; SVG keeps the page fonts, which the receiving application replaces if Bricolage Grotesque or Source Serif 4 is not installed.
 
 ---
 

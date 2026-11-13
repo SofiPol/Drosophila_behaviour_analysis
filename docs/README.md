@@ -58,7 +58,7 @@ A workflow is included at `.github/workflows/pages.yml`. Set **Settings → Page
 | **07 Circadian** | Chi-square periodogram (Sokolove–Bushell), Lomb–Scargle, autocorrelation (RI/RS), FFT, cosinor and onset regression; consensus flags, population periodograms, a single-fly view pairing one animal's actogram with its own periodogram (peak marker, τ annotation, rhythmic verdict, previous/next navigation), synthetic validation and property tests. |
 | **08 Phase** | IS, IV, M10, L5, relative amplitude, centre of gravity, acrophase, M/E peaks, onset/offset, day/night ratio, MAI/EAI anticipation indices. |
 | **09 Statistics** | Shapiro–Wilk, Welch/Student t, Mann–Whitney, ANOVA, Kruskal–Wallis, Dunn, pairwise corrected tests, Fisher exact/chi-square, Cohen's d and rank-biserial effect sizes, profile permutation tests. |
-| **10 Export** | Tidy CSVs (`animals_summary`, `time_series`, `bouts`, `periodograms`, `profiles`, `group_stats`, `phase_metrics`), figures as PNG, BMP, JPEG or SVG (vector), HTML report, print-to-PDF and a ZIP package with `manifest.json`. |
+| **10 Export** | Tidy CSVs (`animals_summary`, `time_series`, `bouts`, `periodograms`, `profiles`, `group_stats`, `phase_metrics`), figures as PNG, BMP, JPEG, SVG (vector) or PDF (vector), HTML report, print-to-PDF and a ZIP package with `manifest.json`. |
 
 Use the **Dark / Light** button in the header to switch theme; the choice is remembered in the browser. Charts use a near-square canvas and the vibrant Okabe–Ito-derived palette, with legends above the overview timeline and activity profile.
 
@@ -137,6 +137,7 @@ docs/
 │   ├── circadian.js            # χ², Lomb–Scargle, autocorrelation, FFT, cosinor, onset
 │   ├── phase.js                # IS/IV/RA/COG/anticipation
 │   ├── charts.js               # Plotly figures and figure export
+│   ├── pdfexport.js            # vector PDF writer (Illustrator / journals)
 │   ├── sample.js               # deterministic demo + validation signals
 │   └── app.js                  # UI state, rendering, exports
 ├── vendor/

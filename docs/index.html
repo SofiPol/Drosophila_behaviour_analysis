@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
-<link rel="icon" type="image/svg+xml" href="assets/insect-mark.svg?v=2.9.0">
-<link rel="stylesheet" href="css/styles.css?v=2.9.0">
+<link rel="icon" type="image/svg+xml" href="assets/insect-mark.svg?v=2.9.1">
+<link rel="stylesheet" href="css/styles.css?v=2.9.1">
 </head>
 <body>
 <div class="app-shell">
@@ -83,7 +83,7 @@
           <p class="privacy-note">Nothing is uploaded to a server. The page runs entirely client-side.</p>
         </div>
         <figure class="hero-figure" aria-hidden="true">
-          <img class="hero-figure-insect" src="assets/insect-drawing.png?v=2.9.0" alt="">
+          <img class="hero-figure-insect" src="assets/insect-drawing.png?v=2.9.1" alt="">
           <figcaption><span>one animal</span><span>every rhythm</span></figcaption>
         </figure>
       </div>
@@ -678,7 +678,7 @@
           </div>
         </article>
         <article class="card">
-          <header class="card-head"><span class="card-index">B</span><div><h3>Figures</h3><p>Raster (PNG, BMP, JPEG) or vector (SVG).</p></div></header>
+          <header class="card-head"><span class="card-index">B</span><div><h3>Figures</h3><p>Raster (PNG, BMP, JPEG) or vector (SVG, PDF).</p></div></header>
           <div class="controls">
             <label>Figure<select id="export-figure-select">
               <option value="profile-main">24-hour profile</option>
@@ -691,11 +691,11 @@
               <option value="surv-curve">Survival curves</option>
               <option value="surv-bar">% alive at end</option>
             </select></label>
-            <label>Format<select id="export-format"><option value="png">PNG</option><option value="svg">SVG (vector)</option><option value="bmp">BMP</option><option value="jpeg">JPEG</option></select></label>
+            <label>Format<select id="export-format"><option value="png">PNG</option><option value="svg">SVG (vector)</option><option value="pdf">PDF (vector)</option><option value="bmp">BMP</option><option value="jpeg">JPEG</option></select></label>
             <label>Scale<select id="export-scale"><option value="1">1×</option><option value="2">2×</option><option value="3" selected>3×</option><option value="4">4×</option></select></label>
             <button class="btn primary" id="btn-export-figure" type="button">Export figure</button>
           </div>
-          <p class="hint">SVG is true vector output — open it in Illustrator, Inkscape or PowerPoint when the figure needs editing. Scale applies to raster formats (PNG, BMP, JPEG) and is ignored for SVG. Multi-panel grids are composed into one image for raster formats; SVG is offered for single figures only. The per-figure <em>Export</em> buttons use the format chosen here.</p>
+          <p class="hint">SVG and PDF are true vector output. PDF is the safest choice for Illustrator, Inkscape or PowerPoint: the page is sized to the figure and text is set in Helvetica/Times, so nothing is missing when opened. SVG keeps the page fonts (Bricolage Grotesque, Source Serif 4), which Illustrator replaces unless they are installed. Scale applies to raster formats only. Multi-panel grids become one page for PDF and one image for rasters; SVG is offered for single figures. The per-figure <em>Export</em> buttons use the format chosen here.</p>
         </article>
       </div>
       <article class="card">
@@ -723,7 +723,7 @@
       <a href="#video" data-goto="video"><span>11</span>Video</a>
       <a href="#export" data-goto="export"><span>12</span>Export</a>
     </div>
-<div class="footer-meta"><span>Chronobiology Workbench v2.9.0</span><span>Client-side · no data leaves your browser</span></div>
+<div class="footer-meta"><span>Chronobiology Workbench v2.9.1</span><span>Client-side · no data leaves your browser</span></div>
   </footer>
 </div>
 
@@ -749,16 +749,17 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/sql-wasm.js"></script>
-<script src="js/core.js?v=2.9.0"></script>
-<script src="js/stats.js?v=2.9.0"></script>
-<script src="js/importers.js?v=2.9.0"></script>
-<script src="js/sleep.js?v=2.9.0"></script>
-<script src="js/circadian.js?v=2.9.0"></script>
-<script src="js/phase.js?v=2.9.0"></script>
-<script src="js/lifespan.js?v=2.9.0"></script>
-<script src="js/video.js?v=2.9.0"></script>
-<script src="js/charts.js?v=2.9.0"></script>
-<script src="js/sample.js?v=2.9.0"></script>
-<script src="js/app.js?v=2.9.0"></script>
+<script src="js/core.js?v=2.9.1"></script>
+<script src="js/stats.js?v=2.9.1"></script>
+<script src="js/importers.js?v=2.9.1"></script>
+<script src="js/sleep.js?v=2.9.1"></script>
+<script src="js/circadian.js?v=2.9.1"></script>
+<script src="js/phase.js?v=2.9.1"></script>
+<script src="js/lifespan.js?v=2.9.1"></script>
+<script src="js/video.js?v=2.9.1"></script>
+<script src="js/pdfexport.js?v=2.9.1"></script>
+<script src="js/charts.js?v=2.9.1"></script>
+<script src="js/sample.js?v=2.9.1"></script>
+<script src="js/app.js?v=2.9.1"></script>
 </body>
 </html>

@@ -1317,6 +1317,10 @@
   async function figureToBlob(el, format = 'png', scale = 3) {
     const fmt = String(format || 'png').toLowerCase().replace('jpg', 'jpeg');
     const plots = plotNodes(el);
+    if (fmt === 'pdf') {
+      if (!global.PdfExport) throw new Error('PDF export is unavailable: pdfexport.js did not load.');
+      return global.PdfExport.fromPlots(plots);
+    }
     if (fmt === 'svg') {
       if (plots.length > 1) throw new Error('SVG export is available for single figures; choose PNG, BMP or JPEG for a grid.');
       const p = plots[0];
